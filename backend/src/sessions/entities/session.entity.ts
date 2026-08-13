@@ -2,21 +2,31 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
+  RelationId,
   UpdateDateColumn,
 } from 'typeorm';
+import { UserEntity } from '../../users/entities/user.entity';
 
 /**
- * A session is a record of a user's authentication status. It is used to
- * track the user's authentication status and to revoke the user's authentication
- * if it is no longer valid.
+ * A refresh-token session. Revoke by setting `revokedAt`; delete on logout or
+ * when the user is removed (`onDelete: 'CASCADE'` on the user relation).
  */
 @Entity('sessions')
 export class SessionEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column('uuid')
+  @ManyToOne(() => UserEntity, (user) => user.sessions, {
+    onDelete: 'CASCADE',
+    nullable: false,
+  })
+  @JoinColumn({ name: 'userId' })
+  user: UserEntity;
+
+  @RelationId((session: SessionEntity) => session.user)
   userId: string;
 
   @Column({ type: 'varchar' })
