@@ -19,6 +19,34 @@ Create the database if it does not exist:
 psql -U postgres -c "CREATE DATABASE postman_clone"
 ```
 
+## Quick start — `dev.sh`
+
+`dev.sh` installs dependencies in both repos, starts them, and supervises them.
+
+```bash
+./dev.sh                  # yarn install everywhere, start both, print status
+./dev.sh status           # status table
+./dev.sh restart backend  # restart one service
+./dev.sh stop             # stop everything
+./dev.sh logs frontend -f # tail a log
+```
+
+```
+SERVICE    STATUS     PID      PORT   URL                                UPTIME
+backend    running    25636    3000   http://localhost:3000/api/tasks    5s
+frontend   running    6344     5173   http://localhost:5173              2s
+```
+
+Every command takes an optional service name (`backend` or `frontend`); omit it to act
+on both. Liveness is determined by *what is actually listening on the port*, not by a
+pidfile, so a stale pidfile or an orphaned child never produces a wrong answer. Stopping
+kills the whole process tree — `yarn dev` spawns node, and killing only the parent would
+leave the real server holding the port.
+
+Logs and pidfiles live in the gitignored `.dev/` directory.
+
+Run the repos by hand instead if you prefer:
+
 ## Backend
 
 ```bash
