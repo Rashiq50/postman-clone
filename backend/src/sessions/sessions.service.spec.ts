@@ -7,7 +7,11 @@ import { SessionsService } from './sessions.service';
 
 describe('SessionsService', () => {
   let service: SessionsService;
-  let sessionsRepository: { create: jest.Mock; save: jest.Mock };
+  let sessionsRepository: {
+    create: jest.Mock;
+    save: jest.Mock;
+    count: jest.Mock;
+  };
 
   beforeEach(async () => {
     sessionsRepository = {
@@ -15,6 +19,7 @@ describe('SessionsService', () => {
       save: jest.fn((entity: Partial<SessionEntity>) =>
         Promise.resolve({ id: 'session-1', ...entity }),
       ),
+      count: jest.fn().mockResolvedValue(1),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -71,6 +76,29 @@ describe('SessionsService', () => {
       expect(stored.expiresAt.getTime()).toBeLessThanOrEqual(
         Date.now() + thirtyDays,
       );
+    });
+  });
+
+  describe('isActive', () => {
+    it('requires the session to be unrevoked and unexpired, in SQL', async () => {
+      await service.isActive('session-1');
+
+      const where = sessionsRepository.count.mock.calls[0][0]
+        .where as Record<string, unknown>;
+      expect(where.id).toBe('session-1');
+      // IsNull() / MoreThan(now) operators, not values compared in JS.
+      expect(where.revokedAt).toBeDefined();
+      expect(where.expiresAt).toBeDefined();
+    });
+
+    it('is false when no row matches', async () => {
+      sessionsRepository.count.mockResolvedValue(0);
+
+      await expect(service.isActive('session-1')).resolves.toBe(false);
+    });
+
+    it('is true when a live session matches', async () => {
+      await expect(service.isActive('session-1')).resolves.toBe(true);
     });
   });
 });

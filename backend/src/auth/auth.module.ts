@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserEntity } from '../users/entities/user.entity';
 import { SessionsService } from '../sessions/sessions.service';
@@ -40,7 +42,16 @@ import { SessionEntity } from '../sessions/entities/session.entity';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, SessionsService],
-  exports: [JwtModule],
+  providers: [
+    AuthService,
+    SessionsService,
+    JwtAuthGuard,
+    // Fail closed: every route in the application is authenticated unless it is
+    // explicitly marked `@Public()`. `useExisting` rather than `useClass` so the
+    // global guard and any explicit `@UseGuards(JwtAuthGuard)` share one
+    // instance instead of each doing its own session lookup.
+    { provide: APP_GUARD, useExisting: JwtAuthGuard },
+  ],
+  exports: [JwtModule, JwtAuthGuard],
 })
 export class AuthModule { }

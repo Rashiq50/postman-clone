@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import crypto from 'node:crypto';
-import { Repository } from 'typeorm';
+import { IsNull, MoreThan, Repository } from 'typeorm';
 import { sha256 } from '../common/crypto/sha256';
 import { SessionEntity } from './entities/session.entity';
 
@@ -43,6 +43,26 @@ export class SessionsService {
             session,
             refreshToken,
         };
+    }
+
+    /**
+     * Whether `sessionId` may still authenticate a request: it exists, was not
+     * revoked, and has not expired.
+     *
+     * Both conditions are evaluated in SQL against the current time rather than
+     * read into memory and compared, so a session cannot be considered live on
+     * the strength of a stale row this process loaded earlier.
+     */
+    async isActive(sessionId: string): Promise<boolean> {
+        const count = await this.sessionsRepository.count({
+            where: {
+                id: sessionId,
+                revokedAt: IsNull(),
+                expiresAt: MoreThan(new Date()),
+            },
+        });
+
+        return count > 0;
     }
 
     // findByRefreshToken(token: string)

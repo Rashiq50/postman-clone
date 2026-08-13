@@ -1,6 +1,7 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
 import { API_VERSION } from '@postman-clone/contracts';
 import type { Response } from 'express';
+import { Public } from '../auth/public.decorator';
 import { HealthService } from './health.service';
 
 export interface HealthResponse {
@@ -19,7 +20,12 @@ export interface ReadinessResponse {
  *
  * These intentionally use a simple JSON shape rather than the API error
  * envelope — probes only need a status code and a minimal body.
+ *
+ * Public because a load balancer has no credentials, and a liveness probe that
+ * can fail on an auth problem is worse than useless. Neither route reveals
+ * anything beyond whether the process and its database are up.
  */
+@Public()
 @Controller({ version: API_VERSION })
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
