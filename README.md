@@ -105,9 +105,20 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 | `GET` | `/api/v1/tasks/:id` | — | `Task` |
 | `PATCH` | `/api/v1/tasks/:id` | partial | `Task` |
 | `DELETE` | `/api/v1/tasks/:id` | — | 204 |
+| `GET` | `/api/v1/health` | — | `{ status: "ok" }` |
+| `GET` | `/api/v1/ready` | — | `{ status, checks }` (503 if DB down) |
 
 Lists always return `{ data, meta }`. Never a bare array — growing one into a paginated
 response later is a breaking change for every client. `limit` is capped at 100.
+
+**Health probes** use a simple JSON shape (not the API error envelope):
+
+| Endpoint | Purpose | Success | Failure |
+| --- | --- | --- | --- |
+| `GET /api/v1/health` | Liveness — process is up | `200 { "status": "ok" }` | — |
+| `GET /api/v1/ready` | Readiness — can serve traffic (DB reachable) | `200 { "status": "ok", "checks": { "database": "up" } }` | `503 { "status": "error", "checks": { "database": "down" } }` |
+
+Wire Kubernetes (or similar) liveness to `/health` and readiness to `/ready`.
 
 **Controllers never return entities.** They return `TaskResponseDto`, built with
 class-transformer's `excludeExtraneousValues`, so only `@Expose()`d fields reach the wire.
@@ -185,5 +196,4 @@ UI state.
   { rawBody: true })` before integrating. Plan idempotency keys on money-moving endpoints.
 - **RBAC** — `Task` has no owner column yet. Adding audit/ownership columns to a base
   entity before the table grows avoids a backfill later.
-- Not yet present and not path-dependent: structured error codes, correlation IDs, health
-  checks, Docker Compose, e2e test database.
+- Not yet present and not path-dependent: Docker Compose, e2e test database.

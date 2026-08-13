@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { buildDataSourceOptions } from './config/database.config';
 import {
   envValidationOptions,
   envValidationSchema,
 } from './config/env.validation';
+import { HealthModule } from './health/health.module';
 import { TasksModule } from './tasks/tasks.module';
 
 @Module({
@@ -30,9 +29,8 @@ import { TasksModule } from './tasks/tasks.module';
         autoLoadEntities: true,
       }),
     }),
+    HealthModule,
     TasksModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}
