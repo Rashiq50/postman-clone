@@ -5,15 +5,13 @@ import crypto from 'node:crypto';
 import { Repository } from 'typeorm';
 import { sha256 } from '../common/crypto/sha256';
 import { SessionEntity } from './entities/session.entity';
-import { UserEntity } from '../users/entities/user.entity';
+
 @Injectable()
 export class SessionsService {
     constructor(
         @InjectRepository(SessionEntity)
         private readonly sessionsRepository: Repository<SessionEntity>,
         private readonly configService: ConfigService,
-        @InjectRepository(UserEntity)
-        private readonly usersRepository: Repository<UserEntity>,
     ) { }
 
     // TODO: Implement the service methods
@@ -45,20 +43,6 @@ export class SessionsService {
             session,
             refreshToken,
         };
-    }
-
-    async login(email: string, password: string): Promise<{
-        session: SessionEntity;
-        refreshToken: string;
-    }> {
-        const user = await this.usersRepository.findOne({ where: { email } });
-        if (!user) {
-            throw new UnauthorizedException('Invalid credentials');
-        }
-        if (user.passwordHash !== sha256(password)) {
-            throw new UnauthorizedException('Invalid credentials');
-        }
-        return await this.create(user.id);
     }
 
     // findByRefreshToken(token: string)
