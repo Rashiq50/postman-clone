@@ -8,6 +8,9 @@ import {
 } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { TasksModule } from './tasks/tasks.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { SessionsModule } from './sessions/sessions.module';
 
 @Module({
   imports: [
@@ -31,6 +34,9 @@ import { TasksModule } from './tasks/tasks.module';
     }),
     HealthModule,
     TasksModule,
+    AuthModule,
+    UsersModule,
+    SessionsModule,
   ],
 })
 export class AppModule {}

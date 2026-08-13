@@ -21,6 +21,10 @@ export const envValidationSchema = Joi.object({
   // Allowed to be empty (trust auth), but must be present and deliberate.
   DB_PASSWORD: Joi.string().allow('').required(),
   DB_NAME: Joi.string().required(),
+  JWT_ACCESS_SECRET: Joi.string().required(),
+  JWT_ACCESS_EXPIRES_IN: Joi.string().required(),
+  REFRESH_TOKEN_EXPIRES_IN: Joi.string().required(),
+  AUTH_COOKIE_NAME: Joi.string().required(),
 });
 
 export const envValidationOptions = {

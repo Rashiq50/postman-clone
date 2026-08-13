@@ -27,7 +27,6 @@
     "migration:show": "yarn typeorm migration:show"
   },
   "dependencies": {
-    "@postman-clone/contracts": "file:../packages/contracts",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -36,6 +35,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/typeorm": "^11.0.3",
+    "@postman-clone/contracts": "file:../packages/contracts",
     "argon2": "^0.45.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
