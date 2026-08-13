@@ -9,37 +9,47 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
+import { API_VERSION, type Paginated } from '@postman-clone/contracts';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { TaskResponseDto } from './dto/task-response.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-import { Task } from './entities/task.entity';
 import { TasksService } from './tasks.service';
 
-@Controller('tasks')
+@Controller({ path: 'tasks', version: API_VERSION })
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
-  create(@Body() createTaskDto: CreateTaskDto): Promise<Task> {
-    return this.tasksService.create(createTaskDto);
+  async create(@Body() createTaskDto: CreateTaskDto): Promise<TaskResponseDto> {
+    return TaskResponseDto.from(await this.tasksService.create(createTaskDto));
   }
 
   @Get()
-  findAll(): Promise<Task[]> {
-    return this.tasksService.findAll();
+  async findAll(
+    @Query() query: PaginationQueryDto,
+  ): Promise<Paginated<TaskResponseDto>> {
+    const page = await this.tasksService.findAll(query);
+    return { ...page, data: TaskResponseDto.fromMany(page.data) };
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Task> {
-    return this.tasksService.findOne(id);
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<TaskResponseDto> {
+    return TaskResponseDto.from(await this.tasksService.findOne(id));
   }
 
   @Patch(':id')
-  update(
+  async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTaskDto: UpdateTaskDto,
-  ): Promise<Task> {
-    return this.tasksService.update(id, updateTaskDto);
+  ): Promise<TaskResponseDto> {
+    return TaskResponseDto.from(
+      await this.tasksService.update(id, updateTaskDto),
+    );
   }
 
   @Delete(':id')

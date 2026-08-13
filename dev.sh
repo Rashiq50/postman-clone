@@ -2,8 +2,10 @@
 #
 # dev.sh — install, run and supervise the local dev stack.
 #
-#   ./dev.sh              install deps, start everything, print status
-#   ./dev.sh install      yarn install in every repo
+#   ./dev.sh              install deps, migrate, start everything, show status
+#   ./dev.sh install      yarn install in every repo + build shared contracts
+#   ./dev.sh contracts    rebuild shared contracts only
+#   ./dev.sh migrate      run pending database migrations
 #   ./dev.sh start   [svc]
 #   ./dev.sh stop    [svc]
 #   ./dev.sh restart [svc]
@@ -25,7 +27,7 @@ port_of() { case "$1" in backend) echo "3000"     ;; frontend) echo "5173"     ;
 cmd_of()  { case "$1" in backend) echo "start:dev";; frontend) echo "dev"      ;; esac; }
 url_of()  {
   case "$1" in
-    backend)  echo "http://localhost:3000/api/tasks" ;;
+    backend)  echo "http://localhost:3000/api/v1/tasks" ;;
     frontend) echo "http://localhost:5173"           ;;
   esac
 }
@@ -174,6 +176,15 @@ cmd_install() {
     info "yarn install — $svc"
     ( cd "$dir" && yarn install ) || die "yarn install failed for $svc"
   done
+
+  # Must run after yarn install: yarn prunes packages that are not in a
+  # package.json, and the contracts build is copied in rather than linked.
+  "$ROOT/scripts/sync-contracts.sh" || die "contracts sync failed"
+}
+
+cmd_migrate() {
+  info "running database migrations"
+  ( cd "$ROOT/backend" && yarn migration:run ) || die "migrations failed"
 }
 
 wait_for_port() {
@@ -286,7 +297,7 @@ cmd_restart() {
 }
 
 cmd_status() {
-  local fmt='%-10s %-10s %-8s %-6s %-34s %s\n'
+  local fmt='%-10s %-10s %-8s %-6s %-38s %s\n'
   printf "$BOLD$fmt$RESET" "SERVICE" "STATUS" "PID" "PORT" "URL" "UPTIME"
 
   local svc state status pid colour uptime
@@ -306,7 +317,7 @@ cmd_status() {
 
     printf '%-10s ' "$svc"
     printf '%s%-10s%s ' "$colour" "$status" "$RESET"
-    printf '%-8s %-6s %-34s %s\n' \
+    printf '%-8s %-6s %-38s %s\n' \
       "$pid" "$(port_of "$svc")" "$(url_of "$svc")" "$uptime"
   done
 
@@ -359,6 +370,8 @@ action="${1:-up}"
 
 case "$action" in
   install|i)    cmd_install "$@" ;;
+  migrate)      cmd_migrate      ;;
+  contracts)    "$ROOT/scripts/sync-contracts.sh" ;;
   start)        cmd_start   "$@" ;;
   stop)         cmd_stop    "$@" ;;
   restart)      cmd_restart "$@" ;;
@@ -366,6 +379,8 @@ case "$action" in
   logs|log)     cmd_logs    "$@" ;;
   up)
     cmd_install || exit 1
+    echo
+    cmd_migrate || exit 1
     echo
     cmd_start; rc=$?
     echo

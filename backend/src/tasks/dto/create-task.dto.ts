@@ -1,5 +1,11 @@
-import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { TaskStatus } from '../entities/task.entity';
+import { TaskStatus } from '@postman-clone/contracts';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateTaskDto {
   @IsString()

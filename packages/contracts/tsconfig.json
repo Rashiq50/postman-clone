@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    // node16 + no "type" field in package.json emits CommonJS, so the Nest
+    // backend can require it directly and Vite can pre-bundle it without an
+    // interop shim. Plain "node"/node10 resolution is deprecated in TS 6.
+    "module": "node16",
+    "moduleResolution": "node16",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}

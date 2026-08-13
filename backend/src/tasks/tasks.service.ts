@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { Paginated } from '@postman-clone/contracts';
 import { Repository } from 'typeorm';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { paginated } from '../common/pagination';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Task } from './entities/task.entity';
@@ -17,8 +20,14 @@ export class TasksService {
     return this.tasksRepository.save(task);
   }
 
-  findAll(): Promise<Task[]> {
-    return this.tasksRepository.find({ order: { createdAt: 'DESC' } });
+  async findAll(query: PaginationQueryDto): Promise<Paginated<Task>> {
+    const { page, limit } = query;
+    const [tasks, total] = await this.tasksRepository.findAndCount({
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return paginated(tasks, total, page, limit);
   }
 
   async findOne(id: string): Promise<Task> {

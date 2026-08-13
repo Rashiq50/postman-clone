@@ -1,3 +1,4 @@
+import { TaskStatus } from '@postman-clone/contracts';
 import {
   Column,
   CreateDateColumn,
@@ -5,12 +6,6 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-
-export enum TaskStatus {
-  TODO = 'TODO',
-  IN_PROGRESS = 'IN_PROGRESS',
-  DONE = 'DONE',
-}
 
 @Entity('tasks')
 export class Task {

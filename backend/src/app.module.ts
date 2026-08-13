@@ -3,23 +3,31 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { buildDataSourceOptions } from './config/database.config';
+import {
+  envValidationOptions,
+  envValidationSchema,
+} from './config/env.validation';
 import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: envValidationSchema,
+      validationOptions: envValidationOptions,
+    }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'postgres' as const,
-        host: config.get<string>('DB_HOST', 'localhost'),
-        port: parseInt(config.get<string>('DB_PORT', '5432'), 10),
-        username: config.get<string>('DB_USERNAME', 'postgres'),
-        password: config.get<string>('DB_PASSWORD', '1234'),
-        database: config.get<string>('DB_NAME', 'postman_clone'),
+        ...buildDataSourceOptions({
+          host: config.getOrThrow<string>('DB_HOST'),
+          port: config.getOrThrow<number>('DB_PORT'),
+          username: config.getOrThrow<string>('DB_USERNAME'),
+          password: config.getOrThrow<string>('DB_PASSWORD'),
+          database: config.getOrThrow<string>('DB_NAME'),
+        }),
         autoLoadEntities: true,
-        // Fine for local development only — use migrations before deploying.
-        synchronize: config.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
       }),
     }),
     TasksModule,

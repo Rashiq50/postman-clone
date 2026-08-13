@@ -1,4 +1,8 @@
-import { TASK_STATUSES, type Task, type TaskStatus } from '../../types/task'
+import {
+  TASK_STATUSES,
+  type Task,
+  type TaskStatus,
+} from '@postman-clone/contracts'
 import { useDeleteTaskMutation, useUpdateTaskMutation } from './tasksApi'
 
 const statusStyles: Record<TaskStatus, string> = {
@@ -30,7 +34,10 @@ export function TaskItem({ task }: { task: Task }) {
         value={task.status}
         disabled={isUpdating}
         onChange={(e) =>
-          updateTask({ id: task.id, changes: { status: e.target.value as TaskStatus } })
+          updateTask({
+            id: task.id,
+            changes: { status: e.target.value as TaskStatus },
+          })
         }
         className="rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
       >
