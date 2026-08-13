@@ -21,8 +21,16 @@ export const envValidationSchema = Joi.object({
   // Allowed to be empty (trust auth), but must be present and deliberate.
   DB_PASSWORD: Joi.string().allow('').required(),
   DB_NAME: Joi.string().required(),
-  JWT_ACCESS_SECRET: Joi.string().required(),
-  JWT_ACCESS_EXPIRES_IN: Joi.string().required(),
+  // 32 bytes of entropy is the minimum that makes HS256 signatures worth
+  // trusting; a short human-chosen secret is brute-forceable offline.
+  JWT_ACCESS_SECRET: Joi.string().min(32).required(),
+  // `ms` duration. Access tokens are not revocable before they expire, so keep
+  // this short and let the refresh token carry the long-lived session.
+  JWT_ACCESS_EXPIRES_IN: Joi.string()
+    .pattern(/^\d+(ms|s|m|h|d)$/)
+    .default('15m'),
+  JWT_ISSUER: Joi.string().default('postman-clone'),
+  JWT_AUDIENCE: Joi.string().default('postman-clone-api'),
   REFRESH_TOKEN_EXPIRES_IN: Joi.string().required(),
   AUTH_COOKIE_NAME: Joi.string().required(),
 });
