@@ -137,3 +137,4 @@ dist
 
 # dev.sh runtime state (pids, logs)
 .dev/
+/.dev

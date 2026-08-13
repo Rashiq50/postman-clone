@@ -6,7 +6,7 @@
   "scripts": {
     "setup": "./dev.sh install",
     "dev": "./dev.sh",
-    "contracts:build": "./scripts/sync-contracts.sh",
+    "contracts:build": "node ./scripts/sync-contracts.mjs",
     "contracts:watch": "cd packages/contracts && yarn dev",
     "build": "./scripts/sync-contracts.sh && cd backend && yarn build && cd ../frontend && yarn build"
   }
