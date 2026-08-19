@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
@@ -17,7 +18,6 @@ import { configureApp } from '../src/configure-app';
 
 const EMAIL = 'rashiqrahaman@yahoo.com';
 const PASSWORD = 'Password123!';
-const COOKIE_NAME = 'pc_refresh_token';
 
 interface AuthBody {
   accessToken: string;
@@ -25,11 +25,20 @@ interface AuthBody {
   user: { id: string; email: string; name: string; createdAt: string };
 }
 
-/** Pulls the refresh cookie's value out of a `set-cookie` header list. */
-function refreshCookieValue(setCookie: string[] | undefined): string | null {
-  const header = (setCookie ?? []).find((c) => c.startsWith(`${COOKIE_NAME}=`));
+/**
+ * Pulls the refresh cookie's value out of a `set-cookie` header list.
+ *
+ * The name is read from the running app's `AUTH_COOKIE_NAME` rather than
+ * hard-coded: a deployment that renamed it made every assertion here report a
+ * missing cookie while the cookie was in fact present and correct.
+ */
+function refreshCookieValue(
+  setCookie: string[] | undefined,
+  name: string,
+): string | null {
+  const header = (setCookie ?? []).find((c) => c.startsWith(`${name}=`));
   if (!header) return null;
-  const value = header.split(';')[0].slice(COOKIE_NAME.length + 1);
+  const value = header.split(';')[0].slice(name.length + 1);
   return value.length > 0 ? value : null;
 }
 
@@ -66,6 +75,7 @@ describe('Auth and sessions (e2e)', () => {
   let app: INestApplication<App>;
   let dataSource: DataSource;
   let server: App;
+  let cookieName: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -77,6 +87,7 @@ describe('Auth and sessions (e2e)', () => {
     await app.init();
     server = app.getHttpServer();
     dataSource = app.get(DataSource);
+    cookieName = app.get(ConfigService).getOrThrow<string>('AUTH_COOKIE_NAME');
   });
 
   /** Every test starts from a clean slate for the seed user. */
@@ -113,7 +124,7 @@ describe('Auth and sessions (e2e)', () => {
       const res = await login(newAgent());
 
       const cookie = setCookieHeader(res).find((c) =>
-        c.startsWith(`${COOKIE_NAME}=`),
+        c.startsWith(`${cookieName}=`),
       );
       expect(cookie).toBeDefined();
       expect(cookie).toContain('HttpOnly');
@@ -132,7 +143,7 @@ describe('Auth and sessions (e2e)', () => {
       const raw = JSON.stringify(res.body);
       expect(raw).not.toContain('refreshToken');
 
-      const cookieValue = refreshCookieValue(setCookieHeader(res));
+      const cookieValue = refreshCookieValue(setCookieHeader(res), cookieName);
       expect(cookieValue).toBeTruthy();
       expect(raw).not.toContain(cookieValue as string);
     });
@@ -153,7 +164,7 @@ describe('Auth and sessions (e2e)', () => {
         .send({ email: EMAIL, password: 'wrong' })
         .expect(401);
 
-      expect(refreshCookieValue(setCookieHeader(res))).toBeNull();
+      expect(refreshCookieValue(setCookieHeader(res), cookieName)).toBeNull();
     });
   });
 
@@ -161,7 +172,10 @@ describe('Auth and sessions (e2e)', () => {
     it('logs in, calls a protected route, and refreshes twice', async () => {
       const agent = newAgent();
       const first = await login(agent);
-      const firstCookie = refreshCookieValue(setCookieHeader(first));
+      const firstCookie = refreshCookieValue(
+        setCookieHeader(first),
+        cookieName,
+      );
 
       await agent
         .get('/api/v1/tasks')
@@ -169,7 +183,10 @@ describe('Auth and sessions (e2e)', () => {
         .expect(200);
 
       const second = await agent.post('/api/v1/auth/refresh').expect(200);
-      const secondCookie = refreshCookieValue(setCookieHeader(second));
+      const secondCookie = refreshCookieValue(
+        setCookieHeader(second),
+        cookieName,
+      );
 
       // Rotation: a refresh always hands back a different token.
       expect(secondCookie).toBeTruthy();
@@ -211,12 +228,18 @@ describe('Auth and sessions (e2e)', () => {
     it('revokes the whole family when a spent token is replayed', async () => {
       const agent = newAgent();
       const first = await login(agent);
-      const firstCookie = refreshCookieValue(setCookieHeader(first));
+      const firstCookie = refreshCookieValue(
+        setCookieHeader(first),
+        cookieName,
+      );
       const accessToken = authBody(first).accessToken;
 
       // Rotate once, so `firstCookie` is now spent.
       const second = await agent.post('/api/v1/auth/refresh').expect(200);
-      const secondCookie = refreshCookieValue(setCookieHeader(second));
+      const secondCookie = refreshCookieValue(
+        setCookieHeader(second),
+        cookieName,
+      );
 
       // Replay the spent token past the grace window by ageing `usedAt`.
       await dataSource.query(
@@ -225,13 +248,13 @@ describe('Auth and sessions (e2e)', () => {
 
       await request(server)
         .post('/api/v1/auth/refresh')
-        .set('Cookie', `${COOKIE_NAME}=${firstCookie}`)
+        .set('Cookie', `${cookieName}=${firstCookie}`)
         .expect(401);
 
       // The current, never-spent token is dead too — the family went with it.
       await request(server)
         .post('/api/v1/auth/refresh')
-        .set('Cookie', `${COOKIE_NAME}=${secondCookie}`)
+        .set('Cookie', `${cookieName}=${secondCookie}`)
         .expect(401);
 
       // And so is the access token, which proves the guard sees the revocation.
@@ -246,14 +269,17 @@ describe('Auth and sessions (e2e)', () => {
     it('accepts a replay inside the grace window', async () => {
       const agent = newAgent();
       const first = await login(agent);
-      const firstCookie = refreshCookieValue(setCookieHeader(first));
+      const firstCookie = refreshCookieValue(
+        setCookieHeader(first),
+        cookieName,
+      );
 
       await agent.post('/api/v1/auth/refresh').expect(200);
 
       // Immediately, i.e. well inside REFRESH_ROTATION_GRACE_MS.
       await request(server)
         .post('/api/v1/auth/refresh')
-        .set('Cookie', `${COOKIE_NAME}=${firstCookie}`)
+        .set('Cookie', `${cookieName}=${firstCookie}`)
         .expect(200);
     });
 
@@ -267,14 +293,17 @@ describe('Auth and sessions (e2e)', () => {
     it('still rejects the same token once the window has passed since its first use', async () => {
       const agent = newAgent();
       const first = await login(agent);
-      const firstCookie = refreshCookieValue(setCookieHeader(first));
+      const firstCookie = refreshCookieValue(
+        setCookieHeader(first),
+        cookieName,
+      );
 
       await agent.post('/api/v1/auth/refresh').expect(200);
 
       // An accepted, in-grace replay. A sliding window would re-stamp here.
       await request(server)
         .post('/api/v1/auth/refresh')
-        .set('Cookie', `${COOKIE_NAME}=${firstCookie}`)
+        .set('Cookie', `${cookieName}=${firstCookie}`)
         .expect(200);
 
       // Age only the *first* use. Under a correct implementation the token's
@@ -285,7 +314,7 @@ describe('Auth and sessions (e2e)', () => {
 
       await request(server)
         .post('/api/v1/auth/refresh')
-        .set('Cookie', `${COOKIE_NAME}=${firstCookie}`)
+        .set('Cookie', `${cookieName}=${firstCookie}`)
         .expect(401);
     });
 
@@ -295,7 +324,7 @@ describe('Auth and sessions (e2e)', () => {
 
       await request(server)
         .post('/api/v1/auth/refresh')
-        .set('Cookie', `${COOKIE_NAME}=not-a-real-token`)
+        .set('Cookie', `${cookieName}=not-a-real-token`)
         .expect(401);
 
       // A random guess must not be able to log anybody out.
@@ -311,14 +340,14 @@ describe('Auth and sessions (e2e)', () => {
       const res = await agent.post('/api/v1/auth/logout').expect(204);
 
       const cleared = setCookieHeader(res).find((c) =>
-        c.startsWith(`${COOKIE_NAME}=`),
+        c.startsWith(`${cookieName}=`),
       );
       expect(cleared).toBeDefined();
       // An asymmetric clear is the single most common bug in this feature: if
       // the options do not match the ones used to set it, the browser keeps
       // the cookie and logout silently does nothing.
       expect(cleared).toContain('Path=/api/v1/auth');
-      expect(refreshCookieValue(setCookieHeader(res))).toBeNull();
+      expect(refreshCookieValue(setCookieHeader(res), cookieName)).toBeNull();
 
       await request(server)
         .get('/api/v1/tasks')

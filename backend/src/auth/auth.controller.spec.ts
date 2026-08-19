@@ -4,6 +4,7 @@ import type { CookieOptions, Request, Response } from 'express';
 import { UserEntity } from '../users/entities/user.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { ApiThrottlerGuard } from '../common/throttling/api-throttler.guard';
 
 const COOKIE_NAME = 'pc_refresh_token';
 
@@ -88,7 +89,17 @@ describe('AuthController', () => {
           },
         },
       ],
-    }).compile();
+    })
+      /**
+       * `@UseGuards(ApiThrottlerGuard)` on `register` makes Nest instantiate
+       * the guard, which wants the throttler's options and storage — neither
+       * of which belongs in a controller unit test. Rate limiting is covered
+       * by `api-throttler.guard.spec.ts` and `register-throttle.e2e-spec.ts`;
+       * here it is stubbed out so these tests stay about the handlers.
+       */
+      .overrideGuard(ApiThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<AuthController>(AuthController);
   });

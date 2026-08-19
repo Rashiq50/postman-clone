@@ -60,6 +60,14 @@ export const envValidationSchema = Joi.object({
   // so this sits well above "a few": it bounds abuse rather than policing
   // normal use.
   MAX_SESSIONS_PER_USER: Joi.number().integer().min(1).default(10),
+
+  // Rate limiting for `POST /auth/register`, keyed by IP. Two windows applied
+  // together: a burst bound for a spike and a sustained bound for the total.
+  // See `common/throttling/throttler.config.ts` for why one of each.
+  THROTTLE_BURST_TTL_MS: Joi.number().integer().min(1000).default(60000),
+  THROTTLE_BURST_LIMIT: Joi.number().integer().min(1).default(5),
+  THROTTLE_SUSTAINED_TTL_MS: Joi.number().integer().min(1000).default(3600000),
+  THROTTLE_SUSTAINED_LIMIT: Joi.number().integer().min(1).default(20),
 })
   /**
    * `SameSite=None` without `Secure` is dropped outright by every current

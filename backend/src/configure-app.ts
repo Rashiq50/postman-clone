@@ -33,7 +33,10 @@ export function configureApp(app: INestApplication): void {
   app.enableCors({
     origin: config.getOrThrow<string>('CORS_ORIGIN'),
     credentials: true,
-    exposedHeaders: ['x-request-id'],
+    // `retry-after` alongside the request id: a cross-origin client cannot
+    // read either header unless it is named here, and a 429 whose backoff
+    // hint is invisible to the browser is a 429 the client has to guess at.
+    exposedHeaders: ['x-request-id', 'retry-after'],
   });
 
   app.useGlobalPipes(

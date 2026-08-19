@@ -150,7 +150,9 @@ const RegisterPage = () => {
     }
   }
 
-  if (isAuthenticated) return <Navigate to="/tasks" replace />;
+  // `from`, not a hard-coded `/tasks` — this branch and the `navigate(from)`
+  // in the submit handler race, and must not disagree about the destination.
+  if (isAuthenticated) return <Navigate to={from} replace />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">

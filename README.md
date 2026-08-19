@@ -268,11 +268,35 @@ does not silently depend on `COOKIE_SAME_SITE` never becoming `none`. `/auth/reg
 `/auth/login` carry the same guard: a cross-site POST that silently signs a victim's browser
 into an attacker-controlled account is the login-CSRF variant of the same problem.
 
-**Known gap:** nothing rate-limits register, login or refresh. `RATE_LIMITED` exists in
-`ApiErrorCode` and has no producer; `@nestjs/throttler` is not a dependency. All three are
-brute-forceable, the session cap bounds stored rows but not attempts, and register is
-additionally an email-enumeration oracle by design (see above) — which makes throttling it the
-higher-value half of closing this gap.
+**Rate limiting.** `POST /auth/register` is throttled per caller IP by `ApiThrottlerGuard`, a
+`ThrottlerGuard` subclass that renders its refusal in this API's envelope — `429` with the
+`RATE_LIMITED` code, which until now existed in `ApiErrorCode` with nothing producing it — and
+normalises `Retry-After` (the base guard suffixes that header with the throttler's name for
+every window but `default`, producing a `Retry-After-burst` no client looks for).
+
+Two windows apply to the same request, configured by `THROTTLE_BURST_*` and
+`THROTTLE_SUSTAINED_*`: 5 per minute bounds a spike, 20 per hour bounds the total. One window
+alone forces a bad trade — short and generous leaves an attacker running at that rate forever,
+long and tight locks out an office behind one NAT. Rejected bodies count too, which is the point:
+an address-enumeration run never sends a body that succeeds.
+
+The guard is applied with `@UseGuards` on the one route that needs it, never as an `APP_GUARD` —
+a global throttler would put every task endpoint on a shared IP budget. It also runs *before*
+`OriginCheckGuard`, so a flood is bounded whatever it claims to be, and it is the only thing
+between an unauthenticated caller and an unbounded number of deliberately-expensive Argon2 hashes.
+
+**Two limitations, both real.** The counters are in-memory and per process, so N instances behind
+a load balancer allow N× the configured rate — `@nestjs/throttler-storage-redis` is the fix.
+And `req.ip` is the *proxy's* address behind a load balancer, because `main.ts` does not enable
+Express's `trust proxy`; until that changes, every caller shares one bucket in such a deployment,
+which is a denial of service against your own signups rather than a defence. Enabling trust proxy
+with the deployment's real hop count is a prerequisite for relying on this in production.
+
+**Known gap:** login and refresh are still unthrottled. Both are brute-forceable and the session
+cap bounds stored rows, not attempts. The machinery is now in place — `ThrottlerModule` is
+configured in `AuthModule` and the guard is a shared provider — so closing it is a
+`@UseGuards(ApiThrottlerGuard)` on each, plus a decision about whether they should share
+register's budget or get their own named windows.
 
 ## Frontend
 

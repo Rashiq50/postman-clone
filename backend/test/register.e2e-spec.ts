@@ -1,11 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { THROTTLER_OPTIONS } from '@nestjs/throttler/dist/throttler.constants';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ApiErrorCode } from '@postman-clone/contracts';
 import request from 'supertest';
+import { AppModule } from '../src/app.module';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
-import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/configure-app';
 
 /**
@@ -74,9 +75,26 @@ describe('Registration (e2e)', () => {
     `${EMAIL_PREFIX}${runId}-${counter++}${EMAIL_DOMAIN}`;
 
   beforeAll(async () => {
+    /**
+     * This suite registers ~20 accounts from one address in a few seconds —
+     * exactly the shape `POST /auth/register` is now rate limited against. The
+     * ceiling is raised rather than the guard skipped, so it still runs and a
+     * bug in it still shows up here; `register-throttle.e2e-spec.ts` is where
+     * the limit is deliberately small enough to hit.
+     *
+     * Overriding the provider rather than `process.env`: `ConfigModule.forRoot()`
+     * reads and validates the environment while the `@Module` decorator is
+     * evaluated, i.e. at *import* time, so an assignment in a test file is
+     * always too late to be seen.
+     */
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(THROTTLER_OPTIONS)
+      .useValue({
+        throttlers: [{ name: 'burst', ttl: 60000, limit: 500 }],
+      })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     configureApp(app);

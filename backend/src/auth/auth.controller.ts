@@ -26,6 +26,7 @@ import {
   setRefreshCookie,
 } from './refresh-cookie';
 import { RegisterDto } from './dto/register-dto';
+import { ApiThrottlerGuard } from '../common/throttling/api-throttler.guard';
 
 /**
  * `@Res({ passthrough: true })` on every handler that touches a cookie is
@@ -79,9 +80,17 @@ export class AuthController {
   /**
    * 201 where login is deliberately 200: registration creates the account it
    * then signs in.
+   *
+   * Rate limited, and the throttler runs *before* the origin check so a flood
+   * is bounded whatever it claims to be. This route answers `409 EMAIL_TAKEN`
+   * on a duplicate, which is an email-enumeration oracle by design (the
+   * trade-off is recorded in the README) — the limit is what keeps that
+   * oracle from being usable in bulk, and it is also the only thing standing
+   * between an unauthenticated caller and an unbounded number of Argon2
+   * hashes, each of which is deliberately expensive.
    */
   @Public()
-  @UseGuards(OriginCheckGuard)
+  @UseGuards(ApiThrottlerGuard, OriginCheckGuard)
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(

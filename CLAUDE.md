@@ -229,12 +229,39 @@ And it reads the cookie name from `ConfigService` rather than hard-coding `pc_re
 way `auth.e2e-spec.ts` does — a local `.env` that renamed `AUTH_COOKIE_NAME` makes that older
 suite report a missing cookie when the cookie is right there.
 
-Known gaps, deliberate and noted in the README: **nothing rate-limits register, login or
-refresh** — `RATE_LIMITED` exists in `ApiErrorCode` with no producer, and `@nestjs/throttler` is
-not a dependency; register is additionally an email-enumeration oracle by design, which makes
-throttling it the higher-value half. The e2e suite also runs against the development database
-rather than a scratch one; it cleans up the seed user's sessions after itself, but a dedicated
-test database is still the right fix.
+`POST /auth/register` is now rate limited. `ApiThrottlerGuard`
+([common/throttling/api-throttler.guard.ts](backend/src/common/throttling/api-throttler.guard.ts))
+subclasses `ThrottlerGuard` for two reasons, both load-bearing: the base class throws
+`ThrottlerException`, which would reach the client as a `RATE_LIMITED` code wrapped around the
+message "ThrottlerException: Too Many Requests"; and the base class writes `Retry-After-<name>`
+for any window not called `default`, so the plain `Retry-After` is set here instead. `retry-after`
+is in `configure-app.ts`'s `exposedHeaders` — a cross-origin browser cannot read it otherwise.
+
+- Two named windows (`burst`, `sustained`) apply together, built from `THROTTLE_*` env vars by
+  `buildThrottlerOptions`. One window cannot be both generous enough for a shared NAT and tight
+  enough to stop enumeration.
+- Applied with `@UseGuards(ApiThrottlerGuard, OriginCheckGuard)` on `register` only — **never** as
+  an `APP_GUARD`, which would put the task routes on a shared IP budget. Throttler first, so a
+  flood is bounded before anything else runs.
+- **Two limits are per-process and per-proxy.** In-memory storage means N instances allow N× the
+  rate; `req.ip` is the proxy's address because `trust proxy` is off, which behind a load balancer
+  collapses every caller into one bucket. Both are documented in the README and in the guard.
+- **Tests override `THROTTLER_OPTIONS`, not `process.env`.** `ConfigModule.forRoot()` reads and
+  validates the environment while the `@Module` decorator is evaluated — at *import* time — so an
+  assignment at the top of a spec is always too late. `register.e2e-spec.ts` raises the limit (it
+  registers ~20 accounts in seconds), `register-throttle.e2e-spec.ts` lowers it, and
+  `throttler.config.spec.ts` covers the env-to-options wiring as a pure function. The token is
+  imported from `@nestjs/throttler/dist/throttler.constants` because the package index does not
+  re-export it. `auth.controller.spec.ts` stubs the guard with `.overrideGuard`.
+
+Known gap, deliberate and noted in the README: **login and refresh are still unthrottled.** The
+machinery is in place, so it is a `@UseGuards` on each plus a decision about shared or separate
+budgets. The e2e suite also runs against the development database
+rather than a scratch one; it cleans up after itself, but a dedicated test database is still the
+right fix. Until then `test:e2e` runs `--runInBand`: `auth.e2e-spec.ts` and
+`session-cap.e2e-spec.ts` both mutate the *same* seed user's sessions, so in parallel workers one
+suite deletes rows the other is mid-assertion about. Removing that flag makes the session-cap
+suite fail intermittently and for reasons that have nothing to do with the session cap.
 
 ## Conventions
 
