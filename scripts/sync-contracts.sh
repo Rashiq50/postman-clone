@@ -43,3 +43,14 @@ for app in "${CONSUMERS[@]}"; do
   cp -R "$PKG_DIR/dist" "$dest/dist"
   echo "    installed into $app/node_modules/$PKG_NAME"
 done
+
+# Vite pre-bundles this package (its dist is CommonJS) and caches the result,
+# keyed on package.json and the lockfile — neither of which changes when
+# contracts is rebuilt in place. Without this the dev server keeps serving the
+# previous build, and a newly added export shows up as a runtime
+# "X is not a function" while tsc and `yarn build` pass, since those read the
+# .d.ts. The cache is invalid exactly when this script runs.
+if [ -d "$ROOT/frontend/node_modules/.vite" ]; then
+  rm -rf "$ROOT/frontend/node_modules/.vite"
+  echo "    cleared frontend Vite dep cache"
+fi

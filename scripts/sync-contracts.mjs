@@ -29,3 +29,21 @@ for (const app of consumers) {
   cpSync(join(pkgDir, 'dist'), join(dest, 'dist'), { recursive: true });
   console.log(`    installed into ${app}/node_modules/${pkgName}`);
 }
+
+/**
+ * Vite pre-bundles this package (its dist is CommonJS, so it cannot be served
+ * to the browser as-is) and caches the result in node_modules/.vite. That
+ * cache is keyed on package.json and the lockfile — neither of which changes
+ * when contracts is rebuilt in place — so without this the dev server keeps
+ * serving the *previous* build. The symptom is a runtime
+ * "X is not a function" for a newly added export, while tsc, the editor and
+ * `yarn build` all pass, because every one of those reads the .d.ts instead.
+ *
+ * Deleting the cache here rather than telling developers to `--force`: the
+ * cache is invalid exactly when this script runs, and never otherwise.
+ */
+const viteCache = join(root, 'frontend', 'node_modules', '.vite');
+if (existsSync(viteCache)) {
+  rmSync(viteCache, { recursive: true, force: true });
+  console.log('    cleared frontend Vite dep cache');
+}
