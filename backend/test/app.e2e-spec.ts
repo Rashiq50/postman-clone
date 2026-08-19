@@ -44,14 +44,16 @@ describe('Health and default protection (e2e)', () => {
   });
 
   it('leaves login reachable without a token', () => {
-    return request(app.getHttpServer())
-      .post('/api/v1/auth/login')
-      .send({ email: 'nobody@example.com', password: 'wrong-password' })
-      // 401 for bad credentials — not for a missing token, which would be the
-      // symptom of login itself having become protected.
-      .expect(401)
-      .expect((res) => {
-        expect(res.body.error.message).toBe('Invalid credentials');
-      });
+    return (
+      request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: 'nobody@example.com', password: 'wrong-password' })
+        // 401 for bad credentials — not for a missing token, which would be the
+        // symptom of login itself having become protected.
+        .expect(401)
+        .expect((res) => {
+          expect(res.body.error.message).toBe('Invalid credentials');
+        })
+    );
   });
 });

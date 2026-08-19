@@ -55,7 +55,9 @@ describe('HealthController', () => {
     });
 
     it('returns 503 when the database is unreachable', async () => {
-      healthService.pingDatabase.mockRejectedValue(new Error('connection refused'));
+      healthService.pingDatabase.mockRejectedValue(
+        new Error('connection refused'),
+      );
       const res = mockResponse();
 
       await controller.ready(res);

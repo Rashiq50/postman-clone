@@ -207,11 +207,15 @@ describe('JwtAuthGuard', () => {
     });
 
     it('reads the flag from the handler before the controller', async () => {
-      await guard.canActivate(contextWith(`Bearer ${jwtService.sign({
-        sub: 'u',
-        sid: 's',
-        jti: 'j',
-      })}`).context);
+      await guard.canActivate(
+        contextWith(
+          `Bearer ${jwtService.sign({
+            sub: 'u',
+            sid: 's',
+            jti: 'j',
+          })}`,
+        ).context,
+      );
 
       const [key, targets] = reflector.getAllAndOverride.mock.calls[0];
       expect(key).toBe(IS_PUBLIC_KEY);

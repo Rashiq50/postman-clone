@@ -1,4 +1,8 @@
-import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { API_PREFIX, API_VERSION } from '@postman-clone/contracts';
 import { validationExceptionFactory } from './common/errors/validation-exception.factory';

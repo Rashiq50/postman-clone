@@ -31,7 +31,13 @@ export const envValidationSchema = Joi.object({
     .default('15m'),
   JWT_ISSUER: Joi.string().default('postman-clone'),
   JWT_AUDIENCE: Joi.string().default('postman-clone-api'),
-  REFRESH_TOKEN_EXPIRES_IN: Joi.string().required(),
+  // Same `ms` duration grammar as JWT_ACCESS_EXPIRES_IN. The pattern is not
+  // decoration: `parseDuration` throws on anything else, and without it a typo
+  // here would take the process down at boot rather than being named as the
+  // offending variable.
+  REFRESH_TOKEN_EXPIRES_IN: Joi.string()
+    .pattern(/^\d+(ms|s|m|h|d)$/)
+    .required(),
   AUTH_COOKIE_NAME: Joi.string().required(),
 });
 

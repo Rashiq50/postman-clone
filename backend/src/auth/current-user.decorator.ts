@@ -1,5 +1,8 @@
 import { ExecutionContext, createParamDecorator } from '@nestjs/common';
-import type { AuthenticatedRequest, AuthenticatedUser } from './authenticated-user';
+import type {
+  AuthenticatedRequest,
+  AuthenticatedUser,
+} from './authenticated-user';
 
 /**
  * Injects the verified caller into a handler:
@@ -11,8 +14,8 @@ import type { AuthenticatedRequest, AuthenticatedUser } from './authenticated-us
  * param or body, which the caller controls.
  */
 export const CurrentUser = createParamDecorator(
-    (_data: unknown, context: ExecutionContext): AuthenticatedUser => {
-        const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-        return request.user;
-    },
+  (_data: unknown, context: ExecutionContext): AuthenticatedUser => {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    return request.user;
+  },
 );

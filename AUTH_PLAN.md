@@ -56,7 +56,21 @@ exactly as specified, exported from `index.ts` after `./api`, and `dist/` re-syn
       client's `credentials: 'include'` was being blocked in the browser: without the matching
       `Access-Control-Allow-Credentials` header, Chrome discards the whole response. `app.use(cookieParser())`
       is **still not wired** — the rest of §2.12 is untouched.
-- [ ] Everything else in §2.1–§2.12.
+- [x] `common/duration.ts` + `duration.spec.ts` (§2.1), and `SessionsService` now resolves
+      `refreshTtlMs` once in its constructor. This fixed a live bug: the old
+      `parseInt(value.replace('d','')) * 86400000` multiplied by *days* whatever unit was written,
+      so `12h` meant 12 days and a non-numeric value produced `NaN` → `Invalid Date` → a session
+      that could never be active. It was correct only because `.env` happened to say `7d`.
+- [x] `REFRESH_TOKEN_EXPIRES_IN` gained the `^\d+(ms|s|m|h|d)$` pattern in `env.validation.ts`
+      (§2.3), so a typo is named at boot rather than reaching `parseDuration`. The other four new
+      env keys are still missing.
+- [x] `auth.module.ts` now imports `SessionsModule` and no longer lists `SessionsService` in
+      `providers` (§2.12) — that duplicate provider was building a **second, independent**
+      `SessionsService` for `AuthService` to use. `TypeOrmModule.forFeature([UserEntity])` stays
+      until §2.7 moves `AuthService` onto `UsersService`.
+- [ ] Everything else in §2.1–§2.12 — most importantly the entire refresh-token mechanism:
+      `refresh_tokens` is not a table, and `sessions.refreshTokenHash` is written at login and
+      **read by nothing**, so a refresh token currently cannot be redeemed at all.
 
 **Part 3 — Frontend: done.** Every file in §3.1–§3.8, including the §3.3 stale-token snapshot and
 the §3.8 multi-tab docblock.
@@ -114,8 +128,11 @@ are not runnable until then.
 - Signing/verify options live **only** in the `JwtModule.registerAsync` factory.
 - Every new env var must be added to `env.validation.ts` — Joi runs with `whitelist`.
 - Migrations only; `synchronize` is false.
-- **Match the file's indentation.** `auth/**` and `sessions/sessions.service.ts` are 4-space and
-  not Prettier-clean; everything else is 2-space. Do not reformat.
+- ~~**Match the file's indentation.** `auth/**` and `sessions/sessions.service.ts` are 4-space and
+  not Prettier-clean; everything else is 2-space. Do not reformat.~~ **No longer applies:** a
+  `yarn lint` run (which is `eslint --fix`) reformatted the whole backend on 2026-08-19, and the
+  tree is now uniformly 2-space and Prettier-clean. **Every "(4-space)" label in §2.6, §2.8, §2.9
+  and §2.11 below is stale — write new backend code 2-space.**
 
 ---
 

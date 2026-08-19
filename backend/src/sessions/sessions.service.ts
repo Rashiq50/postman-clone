@@ -1,77 +1,83 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import crypto from 'node:crypto';
 import { IsNull, MoreThan, Repository } from 'typeorm';
 import { sha256 } from '../common/crypto/sha256';
+import { parseDuration } from '../common/duration';
 import { SessionEntity } from './entities/session.entity';
 
 @Injectable()
 export class SessionsService {
-    constructor(
-        @InjectRepository(SessionEntity)
-        private readonly sessionsRepository: Repository<SessionEntity>,
-        private readonly configService: ConfigService,
-    ) { }
+  /**
+   * Resolved once, here, so a malformed REFRESH_TOKEN_EXPIRES_IN stops the
+   * process at boot instead of surfacing on somebody's first login.
+   */
+  private readonly refreshTtlMs: number;
 
-    // TODO: Implement the service methods
+  constructor(
+    @InjectRepository(SessionEntity)
+    private readonly sessionsRepository: Repository<SessionEntity>,
+    private readonly configService: ConfigService,
+  ) {
+    this.refreshTtlMs = parseDuration(
+      this.configService.getOrThrow<string>('REFRESH_TOKEN_EXPIRES_IN'),
+    );
+  }
 
-    async create(userId: string): Promise<{
-        session: SessionEntity;
-        refreshToken: string;
-    }> {
-        const refreshToken = crypto.randomBytes(32).toString('base64url');
+  // TODO: Implement the service methods
 
-        const refreshTokenHash = sha256(refreshToken);
+  async create(userId: string): Promise<{
+    session: SessionEntity;
+    refreshToken: string;
+  }> {
+    const refreshToken = crypto.randomBytes(32).toString('base64url');
 
-        const expiresAt = new Date(
-            Date.now() +
-            parseInt(this.configService.getOrThrow<string>(
-                'REFRESH_TOKEN_EXPIRES_IN',
-            ).replace('d', '')) * 24 * 60 * 60 * 1000,
-        );
+    const refreshTokenHash = sha256(refreshToken);
 
-        const session = this.sessionsRepository.create({
-            user: { id: userId },
-            refreshTokenHash,
-            expiresAt,
-        });
+    const expiresAt = new Date(Date.now() + this.refreshTtlMs);
 
-        await this.sessionsRepository.save(session);
+    const session = this.sessionsRepository.create({
+      user: { id: userId },
+      refreshTokenHash,
+      expiresAt,
+    });
 
-        return {
-            session,
-            refreshToken,
-        };
-    }
+    await this.sessionsRepository.save(session);
 
-    /**
-     * Whether `sessionId` may still authenticate a request: it exists, was not
-     * revoked, and has not expired.
-     *
-     * Both conditions are evaluated in SQL against the current time rather than
-     * read into memory and compared, so a session cannot be considered live on
-     * the strength of a stale row this process loaded earlier.
-     */
-    async isActive(sessionId: string): Promise<boolean> {
-        const count = await this.sessionsRepository.count({
-            where: {
-                id: sessionId,
-                revokedAt: IsNull(),
-                expiresAt: MoreThan(new Date()),
-            },
-        });
+    return {
+      session,
+      refreshToken,
+    };
+  }
 
-        return count > 0;
-    }
+  /**
+   * Whether `sessionId` may still authenticate a request: it exists, was not
+   * revoked, and has not expired.
+   *
+   * Both conditions are evaluated in SQL against the current time rather than
+   * read into memory and compared, so a session cannot be considered live on
+   * the strength of a stale row this process loaded earlier.
+   */
+  async isActive(sessionId: string): Promise<boolean> {
+    const count = await this.sessionsRepository.count({
+      where: {
+        id: sessionId,
+        revokedAt: IsNull(),
+        expiresAt: MoreThan(new Date()),
+      },
+    });
 
-    // findByRefreshToken(token: string)
+    return count > 0;
+  }
 
-    // rotate(sessionId: string, oldToken: string)
+  // findByRefreshToken(token: string)
 
-    // revoke(sessionId: string)
+  // rotate(sessionId: string, oldToken: string)
 
-    // revokeAllForUser(userId: string)
+  // revoke(sessionId: string)
 
-    // deleteExpiredSessions()
+  // revokeAllForUser(userId: string)
+
+  // deleteExpiredSessions()
 }

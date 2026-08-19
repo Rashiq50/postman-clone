@@ -14,18 +14,18 @@ import * as argon2 from 'argon2';
  * output string, so `verify` needs nothing but the stored value.
  */
 const HASH_OPTIONS: argon2.HashOptions = {
-    type: argon2.argon2id,
-    // OWASP's baseline: 19 MiB of memory, 2 passes, 1 lane. Raise `timeCost`
-    // first if you want more margin — and if you change any of these, existing
-    // hashes still verify, because the parameters travel with each hash.
-    memoryCost: 19456,
-    timeCost: 2,
-    parallelism: 1,
+  type: argon2.argon2id,
+  // OWASP's baseline: 19 MiB of memory, 2 passes, 1 lane. Raise `timeCost`
+  // first if you want more margin — and if you change any of these, existing
+  // hashes still verify, because the parameters travel with each hash.
+  memoryCost: 19456,
+  timeCost: 2,
+  parallelism: 1,
 };
 
 /** Argon2id hash of `password`, salt and parameters included in the string. */
 export function hashPassword(password: string): Promise<string> {
-    return argon2.hash(password, HASH_OPTIONS);
+  return argon2.hash(password, HASH_OPTIONS);
 }
 
 /**
@@ -35,12 +35,12 @@ export function hashPassword(password: string): Promise<string> {
  * Argon2 string — a corrupt or legacy row is a failed login, not a 500.
  */
 export async function verifyPassword(
-    storedHash: string,
-    password: string,
+  storedHash: string,
+  password: string,
 ): Promise<boolean> {
-    try {
-        return await argon2.verify(storedHash, password);
-    } catch {
-        return false;
-    }
+  try {
+    return await argon2.verify(storedHash, password);
+  } catch {
+    return false;
+  }
 }

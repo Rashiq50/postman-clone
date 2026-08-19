@@ -63,7 +63,7 @@ describe('TasksService', () => {
   });
 
   it('scopes the list to the owner', async () => {
-    await service.findAll(OWNER, { page: 1, limit: 10 } as PaginationQueryDto);
+    await service.findAll(OWNER, { page: 1, limit: 10 });
 
     expect(repository.findAndCount).toHaveBeenCalledWith(
       expect.objectContaining({ where: { owner: { id: OWNER } } }),

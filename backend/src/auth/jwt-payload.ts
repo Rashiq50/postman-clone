@@ -5,14 +5,14 @@
  * out — a stale copy inside a token cannot be corrected until it expires.
  */
 export interface JwtPayload {
-    /** User id. `sub` is the registered claim for the token's subject. */
-    sub: string;
-    /** Session id, so a token can be tied back to the refresh session that minted it. */
-    sid: string;
-    /** Unique token id, for logging and future denylisting. */
-    jti: string;
-    iat: number;
-    exp: number;
-    iss: string;
-    aud: string;
+  /** User id. `sub` is the registered claim for the token's subject. */
+  sub: string;
+  /** Session id, so a token can be tied back to the refresh session that minted it. */
+  sid: string;
+  /** Unique token id, for logging and future denylisting. */
+  jti: string;
+  iat: number;
+  exp: number;
+  iss: string;
+  aud: string;
 }

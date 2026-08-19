@@ -1,4 +1,7 @@
-import type { Task as TaskContract, TaskStatus } from '@postman-clone/contracts';
+import type {
+  Task as TaskContract,
+  TaskStatus,
+} from '@postman-clone/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { Task } from '../entities/task.entity';
 
@@ -27,11 +30,15 @@ export class TaskResponseDto implements TaskContract {
   status: TaskStatus;
 
   @Expose()
-  @Transform(({ value }) => (value instanceof Date ? value.toISOString() : value))
+  @Transform(({ value }) =>
+    value instanceof Date ? value.toISOString() : value,
+  )
   createdAt: string;
 
   @Expose()
-  @Transform(({ value }) => (value instanceof Date ? value.toISOString() : value))
+  @Transform(({ value }) =>
+    value instanceof Date ? value.toISOString() : value,
+  )
   updatedAt: string;
 
   static from(task: Task): TaskResponseDto {

@@ -56,7 +56,7 @@ describe('AuthService', () => {
         { provide: SessionsService, useValue: sessionsService },
         {
           provide: getRepositoryToken(UserEntity),
-          useValue: usersRepository as unknown as Repository<UserEntity>,
+          useValue: usersRepository,
         },
       ],
     }).compile();

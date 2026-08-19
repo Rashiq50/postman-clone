@@ -4,5 +4,5 @@ import { SessionsService } from './sessions.service';
 
 @Controller({ path: 'sessions', version: API_VERSION })
 export class SessionsController {
-  constructor(private readonly sessionsService: SessionsService) { }
+  constructor(private readonly sessionsService: SessionsService) {}
 }

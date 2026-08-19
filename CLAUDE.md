@@ -135,5 +135,11 @@ Knowing where the seams are matters more than the finished parts:
 - Errors: throw Nest exceptions or `ApiException`; `AllExceptionsFilter` maps everything to the
   `{ error: { code, message, ... } }` envelope. Clients branch on `code`, never `message`.
   An unexpected throw becomes a fixed `INTERNAL` — stack traces never reach the client.
-- Formatting is inconsistent across the tree (the `auth/` and `sessions/` files use 4-space indent
-  and are not Prettier-clean). Match the file you are editing rather than reformatting it.
+- **`yarn lint` in `backend/` is `eslint --fix`** — it rewrites files rather than reporting on them.
+  A run in 2026-08 reformatted the whole backend, so `auth/**` and `sessions/**` are no longer the
+  4-space, non-Prettier-clean outliers they used to be; the backend is now uniformly 2-space and
+  Prettier-formatted. Older docs (including parts of [AUTH_PLAN.md](AUTH_PLAN.md)) still say
+  "4-space" for those files — that instruction is stale. It leaves ~15 errors it cannot auto-fix,
+  mostly `no-unsafe-*` in `tasks/` and the specs; those are pre-existing, so a red `yarn lint` is
+  not necessarily your change. Still: match the file you are editing rather than reformatting it.
+- The frontend's `yarn lint` is `oxlint`, which only reports. It is clean.

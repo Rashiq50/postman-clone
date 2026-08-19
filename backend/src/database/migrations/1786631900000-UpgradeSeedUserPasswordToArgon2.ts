@@ -18,9 +18,7 @@ const ARGON2_HASH =
 const SHA256_HASH =
   'a109e36947ad56de1dca1cc49f0ef8ac9ad9a7b1aa0df41fb3c4cb73c1ff01ea';
 
-export class UpgradeSeedUserPasswordToArgon21786631900000
-  implements MigrationInterface
-{
+export class UpgradeSeedUserPasswordToArgon21786631900000 implements MigrationInterface {
   name = 'UpgradeSeedUserPasswordToArgon21786631900000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

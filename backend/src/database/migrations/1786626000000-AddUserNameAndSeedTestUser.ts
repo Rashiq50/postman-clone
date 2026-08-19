@@ -30,10 +30,9 @@ export class AddUserNameAndSeedTestUser1786626000000 implements MigrationInterfa
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DELETE FROM "users" WHERE "email" = $1`,
-      [SEED_USER.email],
-    );
+    await queryRunner.query(`DELETE FROM "users" WHERE "email" = $1`, [
+      SEED_USER.email,
+    ]);
     await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "name"`);
   }
 }

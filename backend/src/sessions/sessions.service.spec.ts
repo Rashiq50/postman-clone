@@ -83,8 +83,10 @@ describe('SessionsService', () => {
     it('requires the session to be unrevoked and unexpired, in SQL', async () => {
       await service.isActive('session-1');
 
-      const where = sessionsRepository.count.mock.calls[0][0]
-        .where as Record<string, unknown>;
+      const where = sessionsRepository.count.mock.calls[0][0].where as Record<
+        string,
+        unknown
+      >;
       expect(where.id).toBe('session-1');
       // IsNull() / MoreThan(now) operators, not values compared in JS.
       expect(where.revokedAt).toBeDefined();

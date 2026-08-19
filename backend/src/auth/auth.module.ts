@@ -7,12 +7,22 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserEntity } from '../users/entities/user.entity';
-import { SessionsService } from '../sessions/sessions.service';
-import { SessionEntity } from '../sessions/entities/session.entity';
+import { SessionsModule } from '../sessions/sessions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity, SessionEntity]),
+    // AuthService still reads users through a repository directly; that moves
+    // to UsersService separately.
+    TypeOrmModule.forFeature([UserEntity]),
+    /**
+     * Import the module, never re-provide `SessionsService`. Nest caches module
+     * instances, so importing `SessionsModule` from two places still yields one
+     * service — but listing the *class* in `providers` here builds a second,
+     * independent instance for this module's consumers. Two instances of a
+     * session service is a correctness bug the moment one of them starts
+     * carrying rotation state or opening transactions.
+     */
+    SessionsModule,
     /**
      * Signing options live here, not at each `sign()` call, so every access
      * token in the app is issued with the same algorithm, lifetime, issuer and
@@ -44,7 +54,6 @@ import { SessionEntity } from '../sessions/entities/session.entity';
   controllers: [AuthController],
   providers: [
     AuthService,
-    SessionsService,
     JwtAuthGuard,
     // Fail closed: every route in the application is authenticated unless it is
     // explicitly marked `@Public()`. `useExisting` rather than `useClass` so the
@@ -54,4 +63,4 @@ import { SessionEntity } from '../sessions/entities/session.entity';
   ],
   exports: [JwtModule, JwtAuthGuard],
 })
-export class AuthModule { }
+export class AuthModule {}
