@@ -1,7 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ApiErrorCode } from '@postman-clone/contracts';
 import { randomUUID } from 'node:crypto';
+import { QueryFailedError } from 'typeorm';
 import { hashPassword, verifyPassword } from '../common/crypto/password';
+import { ApiException } from '../common/errors/api.exception';
 import type { SessionContext } from '../sessions/sessions.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { UserEntity } from '../users/entities/user.entity';
@@ -20,6 +23,14 @@ import type { JwtPayload } from './jwt-payload';
  */
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=19456,p=1,t=2$E3baNFDoelmbTljdGFnWZQ$M7/xjGIsJZVBdHr2Pd17WFm8Zhwqujo4uY0EQXort6Q';
+
+/** Postgres unique-constraint violation, surfaced by TypeORM. */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof QueryFailedError &&
+    (error.driverError as { code?: string }).code === '23505'
+  );
+}
 
 /**
  * What the controller needs to answer a login or refresh: the access token and
@@ -44,32 +55,46 @@ export class AuthService {
     private readonly sessionsService: SessionsService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-  ) { }
+  ) {}
 
   async register(
     email: string,
     name: string,
     password: string,
     context?: SessionContext,
-  ) {
-    const hashedPassword = await hashPassword(password);
-    let createdUser = null;
-    createdUser = await this.usersService.create(
-      email, hashedPassword, name
-    )
-    console.log("created user", createdUser);
-    // try {
-    // } catch (error) {
-    // }
-    if (createdUser?.id) {
-      const { session, refreshToken, expiresAt } =
-        await this.sessionsService.create(createdUser.id, context);
+    presentedRefreshToken?: string,
+  ): Promise<IssuedAuth> {
+    const passwordHash = await hashPassword(password);
 
-      return this.issue(createdUser, session.id, refreshToken, expiresAt);
+    let user: UserEntity;
+    try {
+      user = await this.usersService.create(email, passwordHash, name);
+    } catch (error) {
+      // The unique index on users.email is the duplicate check. A
+      // findByEmail-then-insert would race under concurrent submits; the
+      // constraint cannot. The dedicated code (rather than plain CONFLICT) is
+      // what lets the client say "email already in use" — an accepted
+      // enumeration trade-off, documented in the README.
+      if (isUniqueViolation(error)) {
+        throw new ApiException(HttpStatus.CONFLICT, {
+          code: ApiErrorCode.EMAIL_TAKEN,
+          message: 'Email is already registered',
+        });
+      }
+      throw error;
     }
-    else {
 
-    }
+    // Same reasoning as login below: the response is about to overwrite the
+    // browser's single refresh-cookie slot, so the session behind the old
+    // cookie must be revoked or it lives on as an unreachable ghost device.
+    // Only after the user is created — a failed registration must not be able
+    // to kill a session.
+    await this.sessionsService.revokeByRefreshToken(presentedRefreshToken);
+
+    const { session, refreshToken, expiresAt } =
+      await this.sessionsService.create(user.id, context);
+
+    return this.issue(user, session.id, refreshToken, expiresAt);
   }
 
   async login(

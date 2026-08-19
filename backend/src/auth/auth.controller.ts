@@ -38,7 +38,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
-  ) { }
+  ) {}
 
   /** Public by necessity: this is where a caller with no token gets one. */
   @Public()
@@ -76,15 +76,19 @@ export class AuthController {
     return AuthResponseDto.from(issued);
   }
 
+  /**
+   * 201 where login is deliberately 200: registration creates the account it
+   * then signs in.
+   */
   @Public()
   @UseGuards(OriginCheckGuard)
   @Post('register')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.CREATED)
   async register(
     @Body() registerDto: RegisterDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ) {
+  ): Promise<AuthResponseDto> {
     const issued = await this.authService.register(
       registerDto.email,
       registerDto.name,
@@ -93,19 +97,18 @@ export class AuthController {
         userAgent: req.header('user-agent')?.slice(0, 512) ?? null,
         ipAddress: req.ip ?? null,
       },
-    )
+      readRefreshCookie(req, this.configService),
+    );
 
-    if (issued?.refreshToken) {
-      setRefreshCookie(
-        res,
-        this.configService,
-        issued.refreshToken,
-        issued.refreshExpiresAt,
-      );
+    setRefreshCookie(
+      res,
+      this.configService,
+      issued.refreshToken,
+      issued.refreshExpiresAt,
+    );
 
-      return AuthResponseDto.from(issued);
-    }
-
+    // Note the refresh token is *not* in this body. It goes in the cookie only.
+    return AuthResponseDto.from(issued);
   }
 
   /**
