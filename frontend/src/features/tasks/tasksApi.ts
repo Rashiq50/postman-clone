@@ -1,30 +1,11 @@
-import {
-  API_PREFIX,
-  API_VERSION,
-  type CreateTaskInput,
-  type Paginated,
-  type PaginationQuery,
-  type Task,
-  type UpdateTaskInput,
+import type {
+  CreateTaskInput,
+  Paginated,
+  PaginationQuery,
+  Task,
+  UpdateTaskInput,
 } from '@postman-clone/contracts'
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-
-// In development this stays relative and Vite proxies it. In production set
-// VITE_API_URL when the API is not on the same origin as the app.
-const apiRoot = import.meta.env.VITE_API_URL ?? `/${API_PREFIX}`
-
-/**
- * The single API slice. Feature modules add their endpoints with
- * `baseApi.injectEndpoints(...)` rather than calling `createApi` again — one
- * cache, one middleware, and one place for auth headers and 401 refresh once
- * those exist.
- */
-export const baseApi = createApi({
-  reducerPath: 'api',
-  baseQuery: fetchBaseQuery({ baseUrl: `${apiRoot}/v${API_VERSION}` }),
-  tagTypes: ['Task'],
-  endpoints: () => ({}),
-})
+import { baseApi } from '../../app/baseApi'
 
 export const tasksApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({

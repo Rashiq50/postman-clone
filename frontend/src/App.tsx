@@ -1,20 +1,25 @@
-import { TaskForm } from './features/tasks/TaskForm'
-import { TaskList } from './features/tasks/TaskList'
+import { RouterProvider } from 'react-router'
+import { useAppSelector } from './app/hooks'
+import { router } from './app/router'
+import { selectIsBootstrapped } from './features/auth/authSlice'
 
-function App() {
+function BootSplash() {
   return (
-    <div className="min-h-screen bg-slate-50 py-10">
-      <main className="mx-auto max-w-3xl px-4">
-        <header className="mb-6">
-          <h1 className="text-2xl font-semibold text-slate-900">Tasks</h1>
-          <p className="text-sm text-slate-500">Postman clone — basic CRUD setup</p>
-        </header>
-
-        <TaskForm />
-        <TaskList />
-      </main>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <p className="text-sm text-slate-500">Loading…</p>
     </div>
   )
+}
+
+function App() {
+  const bootstrapped = useAppSelector(selectIsBootstrapped)
+
+  // The router is withheld until the boot-time silent refresh has settled, so
+  // a deep link never flashes /login on its way to its real destination. The
+  // URL is untouched while the splash is up, so nothing is lost.
+  if (!bootstrapped) return <BootSplash />
+
+  return <RouterProvider router={router} />
 }
 
 export default App

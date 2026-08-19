@@ -1,0 +1,72 @@
+import type { SessionSummary } from '@postman-clone/contracts'
+import { useRevokeSessionMutation } from './sessionsApi'
+
+/** Small local formatter — not worth a date library for one label. */
+function relativeTime(iso: string | null): string {
+  if (!iso) return 'never used'
+
+  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000)
+  if (seconds < 60) return 'just now'
+
+  const units: [limit: number, size: number, name: string][] = [
+    [3600, 60, 'minute'],
+    [86400, 3600, 'hour'],
+    [2592000, 86400, 'day'],
+    [Infinity, 2592000, 'month'],
+  ]
+
+  for (const [limit, size, name] of units) {
+    if (seconds < limit) {
+      const value = Math.floor(seconds / size)
+      return `${value} ${name}${value === 1 ? '' : 's'} ago`
+    }
+  }
+
+  return 'a long time ago'
+}
+
+export function SessionItem({ session }: { session: SessionSummary }) {
+  const [revokeSession, { isLoading }] = useRevokeSessionMutation()
+
+  function handleRevoke() {
+    // Revoking your own session correctly cascades into a logout, but that
+    // should not be a surprise click.
+    if (
+      session.current &&
+      !window.confirm('Sign out of this device? You will be returned to the login page.')
+    ) {
+      return
+    }
+
+    void revokeSession(session.id)
+  }
+
+  return (
+    <li className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium text-slate-900">
+          {session.userAgent ?? 'Unknown device'}
+        </p>
+        <p className="truncate text-sm text-slate-500">
+          {session.ipAddress ?? 'Unknown address'} ·{' '}
+          {relativeTime(session.lastUsedAt ?? session.createdAt)}
+        </p>
+      </div>
+
+      {session.current && (
+        <span className="hidden rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800 sm:inline">
+          This device
+        </span>
+      )}
+
+      <button
+        type="button"
+        onClick={handleRevoke}
+        disabled={isLoading}
+        className="rounded-md px-2 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+      >
+        {session.current ? 'Sign out' : 'Revoke'}
+      </button>
+    </li>
+  )
+}

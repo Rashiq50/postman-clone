@@ -182,10 +182,29 @@ For production builds where the API is on another origin, set `VITE_API_URL`
 and quietly breaking the proxy.
 
 Server state lives in RTK Query. There is **one** API slice — `baseApi` in
-`src/features/tasks/tasksApi.ts` — and features add endpoints with `injectEndpoints`
-rather than calling `createApi` again. One cache, one middleware, and one place to put auth
-headers and 401-refresh when those land. Use plain slices in `src/app/store.ts` for local
-UI state.
+`src/app/baseApi.ts` — and features add endpoints with `injectEndpoints`
+rather than calling `createApi` again. One cache, one middleware, and one place for auth
+headers and 401-refresh. It lives under `src/app/` rather than in a feature folder because
+both `features/auth` and `features/tasks` depend on it. Use plain slices in
+`src/app/store.ts` for local UI state.
+
+Routing is `react-router` v7, used as a router only — no `loader`/`action`/`fetcher`, since
+loaders would need the access token out of Redux. A production deploy needs an SPA fallback
+(every path serves `index.html`); `vite dev` and `vite preview` already do this.
+
+### Auth in the client
+
+The access token lives in a Redux slice **in memory only** — never `localStorage` or
+`sessionStorage`. On boot, `bootstrapAuth` (called at module scope in `main.tsx`, not in a
+`useEffect`, which would run twice under StrictMode and burn a rotated refresh token) posts
+once to `/auth/refresh` using the httpOnly cookie. `App` renders a splash until that settles,
+so a deep link never flashes `/login`.
+
+`baseQueryWithReauth` retries a request once after a `401 UNAUTHENTICATED`, sharing a single
+in-flight refresh across every request that fails at the same time — without that, a page with
+three queries would fire three refreshes and the last two would present an already-rotated
+token. Login, refresh, logout and logout-all are exempt: their 401 *is* the answer. When the
+refresh itself fails, `loggedOut()` is dispatched and `RequireAuth` redirects to `/login`.
 
 ## Notes for what's coming
 

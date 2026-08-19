@@ -15,8 +15,14 @@ export function configureApp(app: INestApplication): void {
     defaultVersion: API_VERSION,
   });
 
+  // `credentials: true` is required for the refresh cookie: without the
+  // matching Access-Control-Allow-Credentials header the browser discards the
+  // whole response of any request sent with `credentials: 'include'`, which is
+  // every request the client makes. It also forces a concrete origin — a
+  // wildcard is illegal alongside credentials, which CORS_ORIGIN already is.
   app.enableCors({
     origin: config.getOrThrow<string>('CORS_ORIGIN'),
+    credentials: true,
     exposedHeaders: ['x-request-id'],
   });
 

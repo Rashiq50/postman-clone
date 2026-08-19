@@ -93,11 +93,40 @@ Knowing where the seams are matters more than the finished parts:
   and `cookie-parser` is a dependency, but neither is wired up yet — the httpOnly-cookie path is
   intended and unfinished.
 - `UsersService` is an empty class; `AuthService` talks to the user repository directly.
-- **The frontend has no auth at all** — no login screen, no router, and `baseApi` sends no
-  `Authorization` header. Since the global guard protects `/tasks`, the task UI gets 401s against
-  a running backend. Auth headers and 401-refresh belong in the single `baseApi` in
-  [tasksApi.ts](frontend/src/features/tasks/tasksApi.ts) (features extend it via `injectEndpoints`;
-  never call `createApi` a second time).
+- **The frontend auth is complete and is ahead of the backend.** It is written against the finished
+  API in [AUTH_PLAN.md](AUTH_PLAN.md) — `POST /auth/refresh`, `/auth/logout`, `/auth/logout-all`,
+  `GET /auth/me`, `GET /sessions`, `DELETE /sessions/:id`, and a login response of
+  `{ accessToken, expiresIn, user }` with the refresh token in an httpOnly cookie. Until Part 2
+  lands, everything except login 404s and login's response has no `user`, so the client cannot
+  finish signing in. Do not "fix" the client to match today's backend — finish the backend.
+
+### Frontend auth rules
+
+- The single `baseApi` now lives in [app/baseApi.ts](frontend/src/app/baseApi.ts), **not** in
+  `features/tasks/tasksApi.ts` — both `features/auth` and `features/tasks` depend on it. Features
+  extend it via `injectEndpoints`; never call `createApi` a second time.
+- The access token is held **in memory only**, in `authSlice`. No `localStorage`, no
+  `sessionStorage`, no `redux-persist`. A reload restores the session through the refresh cookie.
+  Adding any persistence layer here is the thing to catch in review.
+- No module-level token mirror. `prepareHeaders` reads the store. The `baseApi ↔ authSlice` cycle
+  is type-only (`import type` + `verbatimModuleSyntax` emits nothing), so it does not exist at runtime.
+- `runRefresh` in `baseApi.ts` calls the refresh URL through `rawBaseQuery` on purpose. Routing it
+  through `authApi.endpoints.refresh.initiate()` would make a real runtime cycle in which `baseApi`
+  is `undefined` at `injectEndpoints` time.
+- The RTK Query slices feed `authSlice` through `onQueryStarted`, never `extraReducers` +
+  `addMatcher` — the latter is a value-level cycle evaluated at module scope.
+- `bootstrapAuth` is dispatched at module scope in `main.tsx`. A `useEffect` runs twice under
+  StrictMode and the second call replays a burned refresh token — a dev-only phantom logout.
+- `baseApi.util.resetApiState()` is called in `LoginPage`'s submit handler, not on logout, where a
+  live subscriber would immediately refetch against a cookie the server has just cleared.
+- **Auth state is per-tab; only the refresh cookie is shared.** `loggedOut()` in one tab does not log
+  out the others — they run on their in-memory access token until it expires or 401s, and only then
+  does their refresh fail and drop them on `/login`. Convergence is by expiry, not by broadcast. The
+  likely future misreading is "logout in one tab logs out all tabs"; it does not, and `BroadcastChannel`
+  is a deliberate non-goal (a second source of truth for auth outside Redux).
+- Before dispatching `loggedOut()`, `baseQueryWithReauth` checks the access token is still the one the
+  request failed under. A refresh that resolves after a login completed is stale and must not wipe the
+  new session. Don't "simplify" that check away.
 
 ## Conventions
 

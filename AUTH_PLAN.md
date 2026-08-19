@@ -14,6 +14,7 @@ but nothing else does:
 - The **frontend has no auth at all**: no login screen, no router, and `baseApi` sends no
   `Authorization` header. Since the global guard protects `/tasks`, the task UI 401s against a
   running backend. The app is currently unusable end-to-end.
+  *(No longer true — Part 3 is built. This section describes the starting point; see **Progress** below.)*
 
 Outcome: a complete session system — login sets an httpOnly refresh cookie, refresh tokens
 rotate on every use with reuse detection, logout and per-device revocation work, and the React
@@ -36,6 +37,69 @@ replaced the session row, every access token would die the instant the client re
 `DELETE /sessions/:id` would be ambiguous. With a child table, **session = device/login (stable
 `sid`)** and **refresh token = one rotation step**. The family *is* the session, so revoking it is
 `UPDATE sessions SET revokedAt = now()`. The guard and its 15 passing tests are untouched.
+
+---
+
+## Progress — Part 1 and Part 3 done, Part 2 not started
+
+*Last updated 2026-08-19. The frontend is complete and is **ahead of the backend**: it is written
+against the finished API described below, so until Part 2 lands only `POST /auth/login` exists, its
+response has no `user`/`expiresIn`, and every other auth route 404s. Do not "fix" the client to
+match today's backend — finish the backend.*
+
+**Part 1 — Contracts: done.** `packages/contracts/src/auth.ts` created with all four interfaces
+exactly as specified, exported from `index.ts` after `./api`, and `dist/` re-synced into both apps.
+
+**Part 2 — Backend: not started**, with one exception taken out of order:
+
+- [x] `configure-app.ts` — `enableCors({ credentials: true })` (§2.12). Pulled forward because the
+      client's `credentials: 'include'` was being blocked in the browser: without the matching
+      `Access-Control-Allow-Credentials` header, Chrome discards the whole response. `app.use(cookieParser())`
+      is **still not wired** — the rest of §2.12 is untouched.
+- [ ] Everything else in §2.1–§2.12.
+
+**Part 3 — Frontend: done.** Every file in §3.1–§3.8, including the §3.3 stale-token snapshot and
+the §3.8 multi-tab docblock.
+
+| § | Item | State |
+|---|---|---|
+| 3.1 | `react-router@7.18.2`, router-only, no `react-router-dom` | done |
+| 3.2 | `features/auth/authSlice.ts` — 4 actions, 4 selectors, no `status`, no persistence, no token mirror | done |
+| 3.3 | `app/baseApi.ts` — moved, `credentials: 'include'`, `prepareHeaders`, `NEVER_REAUTH` on `api.endpoint`, `refreshInFlight` singleton, raw `runRefresh`, token snapshot before `loggedOut()` | done |
+| 3.4 | `features/auth/authApi.ts`, `features/sessions/sessionsApi.ts` — `onQueryStarted`, `resetApiState()` in `LoginPage` | done |
+| 3.5 | `features/auth/bootstrapAuth.ts`, dispatched at module scope in `main.tsx` | done |
+| 3.6 | `router.tsx`, `LoginPage`, `RequireAuth`, `AppShell`, `AppHeader`, `SessionsPage`, `SessionItem`, `TasksPage` | done |
+| 3.7 | `main.tsx`, `App.tsx`, `store.ts`, `tasksApi.ts` trimmed; `vite-env.d.ts` and `.oxlintrc.json` untouched | done |
+| 3.8 | Docblock at the top of `authSlice.ts` + the same in CLAUDE.md | done |
+
+**Two deviations from the letter of Part 3, both deliberate:**
+
+1. §3.1 says to note the SPA fallback in `frontend/README.md`. It went in the **root** `README.md`
+   frontend section instead, because CLAUDE.md marks `frontend/README.md` as untouched framework
+   boilerplate.
+2. §3.6 says `SessionsPage` mirrors `TaskList.tsx`'s four states "verbatim". Same four states, but
+   as conditional blocks rather than early returns: the page header and the "Sign out everywhere"
+   button stay mounted across all of them, and `TaskList` has no header to keep.
+
+**Docs.** `README.md` (new `baseApi` path, routing, an "Auth in the client" subsection) and
+`CLAUDE.md` (rewritten frontend bullet plus a "Frontend auth rules" block) are updated for Part 3.
+Still owed once Part 2 lands: the README's 7 new routes and the backend half of the CLAUDE.md
+rewrite listed under *Docs last*.
+
+**Verification run so far:** `cd frontend && yarn lint && yarn build` — both pass. No frontend test
+runner exists, so there are no frontend unit tests to add. Backend specs and `test:e2e` are
+untouched and will break exactly as the table below predicts once Part 2 starts. Manual steps 1–11
+are not runnable until then.
+
+**Two environment landmines to clear before the first end-to-end login:**
+
+- `backend/.env` has `AUTH_COOKIE_NAME=__Host-refresh`. The `__Host-` prefix requires `Path=/`,
+  which §2.6 deliberately does not use — the browser will silently ignore the cookie, producing a
+  login that appears to work and then never authenticates. `.env.example`'s `pc_refresh_token` is
+  the correct value.
+- `frontend/.env` sets `VITE_API_URL=http://localhost:3000/api`, which bypasses the Vite proxy and
+  makes every dev request cross-origin. `.env.example` says to leave it unset in development;
+  unsetting it also removes CORS from the picture entirely.
 
 ---
 
