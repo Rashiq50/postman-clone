@@ -2,7 +2,7 @@ import { isApiError, type ApiErrorBody } from '@postman-clone/contracts'
 import type { SerializedError } from '@reduxjs/toolkit'
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query'
 
-type QueryError = FetchBaseQueryError | SerializedError | undefined
+export type QueryError = FetchBaseQueryError | SerializedError | undefined
 
 /**
  * Pulls the API's error body out of whatever RTK Query hands back.

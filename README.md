@@ -108,6 +108,29 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 | `GET` | `/api/v1/auth/me` | — | `AuthUser` |
 | `GET` | `/api/v1/sessions?page=1&limit=20` | — | `Paginated<SessionSummary>` |
 | `DELETE` | `/api/v1/sessions/:id` | — | 204 |
+| `GET` | `/api/v1/workspaces?page=1&limit=20` | — | `Paginated<Workspace>` |
+| `POST` | `/api/v1/workspaces` | `{ name }` | `Workspace` (201) |
+| `GET` | `/api/v1/workspaces/:id` | — | `Workspace` |
+| `PATCH` | `/api/v1/workspaces/:id` | `{ name? }` | `Workspace` |
+| `DELETE` | `/api/v1/workspaces/:id` | — | 204 (**409** if personal) |
+| `GET` | `/api/v1/workspaces/:id/tree` | — | `WorkspaceTree` — **single resource** |
+| `GET` | `/api/v1/workspaces/:id/environments` | — | `Paginated<Environment>` |
+| `POST` | `/api/v1/collections` | `{ workspaceId, name, description? }` | `Collection` (201) |
+| `PATCH` | `/api/v1/collections/:id` | partial | `Collection` |
+| `PATCH` | `/api/v1/collections/:id/move` | `{ index }` | `Collection` |
+| `DELETE` | `/api/v1/collections/:id` | — | 204 |
+| `POST` | `/api/v1/folders` | `{ collectionId, parentFolderId?, name }` | `Folder` (201) |
+| `PATCH` | `/api/v1/folders/:id` | `{ name? }` | `Folder` |
+| `PATCH` | `/api/v1/folders/:id/move` | `{ parentFolderId, index? }` | `Folder` (**409** on a cycle) |
+| `DELETE` | `/api/v1/folders/:id` | — | 204 |
+| `POST` | `/api/v1/requests` | `{ collectionId, folderId?, name, … }` | `ApiRequest` (201) |
+| `GET` | `/api/v1/requests/:id` | — | `ApiRequest` |
+| `PATCH` | `/api/v1/requests/:id` | partial | `ApiRequest` |
+| `PATCH` | `/api/v1/requests/:id/move` | `{ folderId, index? }` | `ApiRequest` |
+| `DELETE` | `/api/v1/requests/:id` | — | 204 |
+| `POST` | `/api/v1/environments` | `{ workspaceId, name, variables? }` | `Environment` (201) |
+| `PATCH` | `/api/v1/environments/:id` | partial | `Environment` |
+| `DELETE` | `/api/v1/environments/:id` | — | 204 |
 | `GET` | `/api/v1/tasks?page=1&limit=20` | — | `Paginated<Task>` |
 | `POST` | `/api/v1/tasks` | `{ title, description?, status? }` | `Task` (201) |
 | `GET` | `/api/v1/tasks/:id` | — | `Task` |
@@ -116,8 +139,26 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 | `GET` | `/api/v1/health` | — | `{ status: "ok" }` |
 | `GET` | `/api/v1/ready` | — | `{ status, checks }` (503 if DB down) |
 
+Resources are **flat and top-level, with the parent id in the `POST` body** — a request's
+URL therefore does not change when it moves between folders, so a bookmarked editor link
+survives a reorganisation. The two nested routes (`/tree`, `/environments`) are nested
+because a workspace id is not derivable from anything else.
+
 Lists always return `{ data, meta }`. Never a bare array — growing one into a paginated
 response later is a breaking change for every client. `limit` is capped at 100.
+
+**`GET /workspaces/:id/tree` is the one deliberate exception, and it is not a list.** It
+returns a single object resource, exactly as `GET /auth/me` returns one `AuthUser`, so it
+has no envelope. Its inner arrays are intentionally not paginable: half a tree is not a
+tree, and no page boundary makes sense across a nesting level. The escape hatch for a
+very large workspace is lazy *sub*trees, not a cursor over this one. `GET /workspaces`
+**is** a list and **does** return `Paginated<Workspace>`, so the rule visibly still holds.
+
+The tree is a **skeleton**: request nodes carry `id, name, method, folderId, position` and
+nothing else — no `url`, `headers`, `body` or `auth`. That is what makes fetching a whole
+workspace in one call cheaper than lazy per-collection loading, which would buy no bytes
+worth having and cost an N+1, a spinner per node, and more invalidation complexity. The
+editor fetches the full row from `GET /requests/:id`.
 
 **Health probes** use a simple JSON shape (not the API error envelope):
 
@@ -136,6 +177,58 @@ timestamp — is dropped by default instead of leaking. Keep it that way.
 Request bodies go through a global `ValidationPipe` with `whitelist` and
 `forbidNonWhitelisted`, so unknown fields are rejected with a 400 rather than silently
 assigned.
+
+### Domain and tenancy
+
+The model is `User → Workspace → { Collection → Folder → Request, Environment }`, with
+membership in `workspace_members`. Organizations are **deliberately deferred** behind a
+nullable `workspaces."organizationId"` seam: the column exists and is always NULL, so
+attaching them later is one `ALTER TABLE … ADD CONSTRAINT … NOT VALID` rather than a
+column addition, a backfill, and a rewrite of every scoping clause. Workspaces were built
+first for exactly that reason — retrofitting `workspaceId` onto a populated
+`collections`/`requests` set would have been the expensive direction.
+
+**Authorization travels inside the statement that reads or writes. There is no
+authorization guard, and adding one would be a regression.** This is `TasksService`'s
+pattern one level up: instead of `WHERE "ownerId" = :ownerId` it is
+`WHERE "collectionId" IN (<collections I can write to>)`. See
+`backend/src/workspaces/workspace-scope.ts` for the fragments and the four concrete
+failure modes a guard has — the sharpest being that on `POST /requests` the parent id is
+in the **body**, where a route-param guard cannot see it at all, so such a guard passes
+every hand test while leaving a full cross-tenant write unauthorized.
+
+- **Not a member → 404**, matching `TasksService.findOne`: a 403 confirms the id is real
+  and enables enumeration. **A member whose role is too low → 403**, which leaks nothing
+  because they can already read the row.
+- Roles are `OWNER`/`ADMIN`/`EDITOR`/`VIEWER`, stored as `varchar` + a `CHECK` rather than
+  a Postgres enum, because role sets churn and a `CHECK` is one statement to change. Role
+  checks live nowhere but the `roles` array bound into the scope fragment.
+- **There is no invite endpoint and no members UI in this slice**, so every membership is
+  the `OWNER` row of someone's own personal workspace. `VIEWER` is built anyway because
+  threading the `roles` array through every query is the expensive part and is much worse
+  to retrofit; `workspaces.e2e-spec.ts` inserts a `VIEWER` row directly to prove it works.
+- Ordering is `position integer` with gaps of 1024, reindexed on demand, and every query
+  sorts by `position, createdAt, id` — the trailing keys make a shared position a cosmetic
+  problem rather than an order that flickers between refetches.
+- A **personal workspace is provisioned inside the user-creation transaction**
+  (`UsersService.create`), not by the caller afterwards. A user row with no workspace is a
+  silently and permanently broken account: registration still returns 201 with a working
+  token, `GET /workspaces` is empty, and no endpoint repairs it.
+
+⚠️ **Secrets are stored and returned in plaintext.** `environments.variables` and
+`requests.auth` hold bearer tokens, passwords and API keys unencrypted, and
+`GET /requests/:id` hands them straight back; the `type="password"` inputs in the editor
+are cosmetic. This is what Postman does and an accepted trade-off for this slice, but it
+is a real gap, not an oversight — the fix is a separate write-only secrets table with
+envelope encryption, and it should land before this is exposed to anyone but its author.
+
+**Sending requests is out of scope here.** There is no execution engine, no `{{var}}`
+interpolation, no response pane and no history — and therefore no Send button, not even a
+disabled one, because a disabled Send reads as broken software while an absent one reads
+as an unfinished feature. Send carries its own security surface (SSRF, redirect handling,
+timeouts, response size caps) and gets its own slice. Everything here saves; nothing fires.
+That is also why the environments table, contracts and CRUD exist with **no environment
+UI**: an environment editor without interpolation is a form with no observable effect.
 
 ### Errors
 
@@ -321,6 +414,22 @@ Routing is `react-router` v7, used as a router only — no `loader`/`action`/`fe
 loaders would need the access token out of Redux. A production deploy needs an SPA fallback
 (every path serves `index.html`); `vite dev` and `vite preview` already do this.
 
+There are **two shells**, not one with a branch. `AppShell` is the original `min-h-screen`
+centred `max-w-3xl` column; `WorkbenchShell` is the opposite layout contract — `h-screen
+overflow-hidden`, a fixed sidebar, panes that scroll independently. `/` redirects to
+`/w/:workspaceId`, and the request editor is `/w/:workspaceId/requests/:requestId`.
+
+**The workspace id lives in the URL, and that is a correctness requirement rather than a
+preference.** This app forbids `localStorage`, `sessionStorage` and `redux-persist`, so an
+id kept in Redux would not survive a reload — every refresh would silently drop the user
+into "the first workspace", which stays invisible until someone has two. The URL is the
+only persistence layer available here, and it gives deep links, a working Back button and
+two tabs on two workspaces for free.
+
+`/tasks` and `/sessions` keep the old centred shell. **`/tasks` is the original scaffolding
+and goes away when the execution slice lands** — saying so now is what stops it quietly
+becoming permanent.
+
 ### Auth in the client
 
 The access token lives in a Redux slice **in memory only** — never `localStorage` or
@@ -342,6 +451,21 @@ refresh itself fails, `loggedOut()` is dispatched and `RequireAuth` redirects to
 - **Payments** — Stripe webhook signature verification needs the raw request body, which
   Nest's JSON parser consumes. Create the app with `NestFactory.create(AppModule,
   { rawBody: true })` before integrating. Plan idempotency keys on money-moving endpoints.
-- **RBAC** — `Task` has no owner column yet. Adding audit/ownership columns to a base
-  entity before the table grows avoids a backfill later.
+- **Organizations** — the seam is `workspaces."organizationId"`: nullable, always NULL,
+  no FK. Adding them is a table, a membership table, and one `NOT VALID` foreign key; no
+  read path or route changes, because every query reaches a workspace through
+  `workspace_members` and routes are `/workspaces/:id/…` rather than
+  `/orgs/:orgId/workspaces/:id`. The one genuinely open question it defers is whether an
+  org ADMIN implicitly gets EDITOR on every workspace in the org — and that lives in one
+  function.
+- **Sharing** — needs an invite endpoint, a members pane, and one paired schema change:
+  `workspaces.ownerUserId` is `ON DELETE CASCADE` today, which is right while every
+  workspace is personal and wrong the moment one is not, since deleting a user would take
+  a team's collections with it. It must become `RESTRICT` plus an ownership-transfer
+  endpoint — and `workspaces.e2e-spec.ts` cleans up by deleting users, so its teardown
+  changes at the same time.
+- **Send** — the execution engine, `{{var}}` interpolation, a response pane, history, and
+  the environment UI that only becomes meaningful alongside them. Budget for the security
+  surface: SSRF, redirect handling, timeouts and response size caps.
+- **Encrypting stored secrets** — see the plaintext note under *Domain and tenancy*.
 - Not yet present and not path-dependent: Docker Compose, e2e test database.

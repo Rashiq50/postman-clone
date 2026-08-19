@@ -18,7 +18,10 @@ export function LoginPage() {
 
   const fields = fieldErrors(error);
   const apiError = toApiError(error);
-  const from = (location.state as { from?: string } | null)?.from ?? "/tasks";
+  // Defaults to "/", the workbench, which `WorkspaceRedirect` resolves to
+  // the user's workspace. Not "/tasks" — that page is the original
+  // scaffolding and goes away with the execution slice.
+  const from = (location.state as { from?: string } | null)?.from ?? "/";
 
   /**
    * The previous attempt's error describes credentials the user has now
@@ -51,7 +54,7 @@ export function LoginPage() {
   }
 
   /**
-   * `from`, not a hard-coded `/tasks`: this branch and the imperative
+   * `from`, not a hard-coded route: this branch and the imperative
    * `navigate(from)` above must agree. They race — `credentialsReceived` is
    * dispatched inside `onQueryStarted`, so a re-render can be queued before
    * the handler resumes — and if they disagree, a user who deep-linked to

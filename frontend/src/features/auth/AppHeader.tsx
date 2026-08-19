@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router'
 import { useAppSelector } from '../../app/hooks'
+import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 import { useLogoutMutation, useMeQuery } from './authApi'
 import { selectCurrentUser } from './authSlice'
 
@@ -10,7 +11,12 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-slate-600 hover:bg-slate-100'
   }`
 
-export function AppHeader() {
+/**
+ * `wide` swaps the centred `max-w-3xl` column for a full-width row. One prop
+ * rather than a duplicated header: `AppShell` keeps the centred layout and
+ * `WorkbenchShell` needs the sidebar to start at the left edge.
+ */
+export function AppHeader({ wide = false }: { wide?: boolean }) {
   const user = useAppSelector(selectCurrentUser)
   const [logout, { isLoading }] = useLogoutMutation()
 
@@ -20,8 +26,15 @@ export function AppHeader() {
 
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-3">
+      <div
+        className={`flex items-center gap-2 py-3 ${
+          wide ? 'w-full px-4' : 'mx-auto max-w-3xl px-4'
+        }`}
+      >
         <nav className="flex flex-1 items-center gap-1">
+          <NavLink to="/" end className={linkClass}>
+            Workspace
+          </NavLink>
           <NavLink to="/tasks" className={linkClass}>
             Tasks
           </NavLink>
@@ -29,6 +42,8 @@ export function AppHeader() {
             Sessions
           </NavLink>
         </nav>
+
+        <WorkspaceSwitcher />
 
         {user && (
           <span className="hidden text-sm text-slate-500 sm:inline">

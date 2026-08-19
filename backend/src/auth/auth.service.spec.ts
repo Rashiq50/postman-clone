@@ -238,6 +238,30 @@ describe('AuthService', () => {
       expect(sessionsService.create).not.toHaveBeenCalled();
     });
 
+    // `UsersService.create` now wraps the insert and the personal-workspace
+    // provisioning in one transaction. `manager.transaction` re-throws the
+    // driver error untouched, so the mapping above still works and
+    // `AuthService.register` needed no change — this pins that, because the
+    // failure mode is a duplicate signup turning into a 500.
+    it('still maps EMAIL_TAKEN when the 23505 is raised from inside the provisioning transaction', async () => {
+      // Stands in for the real `manager.transaction`: run the callback, let it
+      // fail, re-throw the driver error unchanged, roll the workspace back with
+      // the user.
+      usersService.create.mockImplementation(() =>
+        Promise.reject(uniqueViolation()),
+      );
+
+      await expect(
+        service.register('taken@example.com', 'N', PASSWORD),
+      ).rejects.toMatchObject({
+        status: HttpStatus.CONFLICT,
+        response: { code: ApiErrorCode.EMAIL_TAKEN },
+      });
+      // Nothing was minted, so there is no orphan session to go with the
+      // rolled-back user and workspace.
+      expect(sessionsService.create).not.toHaveBeenCalled();
+    });
+
     // The duplicate check is the index, not a findByEmail — a pre-check races
     // under concurrent submits.
     it('does not pre-check the address with findByEmail', async () => {

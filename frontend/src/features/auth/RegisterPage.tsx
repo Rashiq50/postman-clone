@@ -91,7 +91,10 @@ const RegisterPage = () => {
   const apiError = toApiError(error);
   const serverFields = fieldErrors(error);
   const clientProblems = validate(values);
-  const from = (location.state as { from?: string } | null)?.from ?? "/tasks";
+  // Defaults to "/", the workbench, which `WorkspaceRedirect` resolves to
+  // the user's workspace. Not "/tasks" — that page is the original
+  // scaffolding and goes away with the execution slice.
+  const from = (location.state as { from?: string } | null)?.from ?? "/";
 
   // 409 EMAIL_TAKEN carries no `details`, so it is attached to the field it is
   // actually about instead of only appearing in the summary at the bottom.
@@ -150,7 +153,7 @@ const RegisterPage = () => {
     }
   }
 
-  // `from`, not a hard-coded `/tasks` — this branch and the `navigate(from)`
+  // `from`, not a hard-coded route — this branch and the `navigate(from)`
   // in the submit handler race, and must not disagree about the destination.
   if (isAuthenticated) return <Navigate to={from} replace />;
 

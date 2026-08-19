@@ -11,6 +11,10 @@ import { TasksModule } from './tasks/tasks.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SessionsModule } from './sessions/sessions.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
+import { CollectionsModule } from './collections/collections.module';
+import { RequestsModule } from './requests/requests.module';
+import { EnvironmentsModule } from './environments/environments.module';
 
 @Module({
   imports: [
@@ -37,6 +41,10 @@ import { SessionsModule } from './sessions/sessions.module';
     AuthModule,
     UsersModule,
     SessionsModule,
+    WorkspacesModule,
+    CollectionsModule,
+    RequestsModule,
+    EnvironmentsModule,
   ],
 })
 export class AppModule {}

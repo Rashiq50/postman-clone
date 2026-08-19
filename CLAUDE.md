@@ -181,6 +181,10 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
 - The single `baseApi` now lives in [app/baseApi.ts](frontend/src/app/baseApi.ts), **not** in
   `features/tasks/tasksApi.ts` — both `features/auth` and `features/tasks` depend on it. Features
   extend it via `injectEndpoints`; never call `createApi` a second time.
+- `tagTypes` is `Task`, `Session`, `Me`, `Workspace`, `Tree`, `Request`. There is deliberately
+  **no `Collection`, `Folder` or `Environment` tag**: none has a read endpoint, so nothing
+  would provide one, and a tag nothing provides makes the cache look covered where it is not.
+  Each arrives with the feature that reads it.
 - The access token is held **in memory only**, in `authSlice`. No `localStorage`, no
   `sessionStorage`, no `redux-persist`. A reload restores the session through the refresh cookie.
   Adding any persistence layer here is the thing to catch in review.
@@ -208,6 +212,113 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
 - Before dispatching `loggedOut()`, `baseQueryWithReauth` checks the access token is still the one the
   request failed under. A refresh that resolves after a login completed is stale and must not wipe the
   new session. Don't "simplify" that check away.
+
+## Domain and tenancy
+
+`User → Workspace → { Collection → Folder → Request, Environment }`, plus
+`workspace_members`. Organizations are deferred behind a nullable, always-NULL
+`workspaces."organizationId"` with no FK — do not add the column, it is already there.
+
+**Authorization is folded into the SQL. There is no authorization guard and adding one is a
+regression, not a refactor.** `workspace-scope.ts` holds the fragments; `scopedWhere()` builds
+the predicate used by *both* the hot-path statement and the failure-path visibility check, so
+the two cannot drift. The argument against a guard is recorded in that file in full — the
+decisive part is that `POST /requests` carries its parent id in the **body**, so a guard keyed
+on route params sees nothing to check and permits a cross-tenant write while passing every
+hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
+
+- **The scoped-`UPDATE` pattern covers update, move and delete. It does not cover `POST`** —
+  there is no row to scope and `affected === 0` never arises. Every create instead resolves
+  its parent through the scoped query *inside its transaction*, with the foreign key as the
+  race backstop, and denies via `explainParentDenial` keyed on the parent the caller named.
+- **404 when not a member** (a 403 would confirm the id is real — verbatim `TasksService`
+  policy); **403 when a member's role is too low** (leaks nothing; they can already read it).
+  Both live in `scope-denial.ts`, and the second query is paid only on the failure path.
+- Role checks live nowhere but the `roles` array bound into the fragment. There is no
+  `if (role === 'VIEWER') throw` anywhere; adding a role is editing one array. Roles are
+  `varchar` + `CHECK`, never a Postgres enum — a `CHECK` is one statement to change.
+- **`provisionPersonalWorkspace` is a plain function taking the caller's `EntityManager`**, and
+  runs inside `UsersService.create`'s transaction. A user with no workspace is a silently and
+  permanently broken account with no repair path. `AuthService.register` needed no change and
+  should keep needing none: `manager.transaction` re-throws the driver error untouched, so its
+  `23505 → EMAIL_TAKEN` catch still fires. Both `users.service.spec.ts` and
+  `auth.service.spec.ts` pin that.
+- Like `refresh-cookie.ts`, `workspace-scope.ts`, `scope-denial.ts` and
+  `provision-personal-workspace.ts` are **plain functions, not providers** — a provider would
+  force `CollectionsModule → WorkspacesModule` and `RequestsModule → WorkspacesModule` edges
+  that buy nothing, and a service bound to the default manager cannot enlist in a caller's
+  transaction anyway. **Nothing imports `WorkspacesModule`.** Keep it that way.
+- `TreeController` lives in `CollectionsModule` despite serving `/workspaces/:id/tree`; that is
+  what keeps `WorkspacesModule` free of a `CollectionsModule` edge.
+
+### Schema traps
+
+- **Two composite FKs — `FK_folders_parent` and `FK_requests_folder` — are owned by the
+  migration**, because TypeORM cannot express a two-column foreign key. They make a
+  cross-collection parent unrepresentable in SQL rather than a service invariant someone
+  forgets. The visible cost: `migration:generate` proposes replacing each with a
+  single-column FK on every run. **That diff is expected and must be discarded** — it is the
+  *only* drift these tables produce, because every other constraint, index and default is
+  declared on the entities precisely so this one stays easy to recognise. (The repo has
+  separate pre-existing drift on `tasks`/`sessions` FK names.)
+- **`FK_requests_folder` relies on `MATCH SIMPLE`**, the Postgres default: with `folderId`
+  NULL the constraint is not checked at all, which is exactly how a request sits at the
+  collection root. `MATCH FULL` would forbid every root-level request.
+- **jsonb defaults must be SQL expressions with no `::jsonb` cast**, spelled the way Postgres
+  normalizes them (`'{"mode": "none"}'`, with the space). `default: []` compares a JS value
+  against a SQL default; a cast is stripped before comparison. Either one emits churn forever.
+- **`position` has no column default anywhere**, deliberately: the service always computes
+  `MAX + 1024`, so a default could only ever mask a path that forgot to.
+- **Folder move cycles are not caught by the FK.** A cycle is self-consistent — every row
+  still points at a real parent in the same collection — but the ring detaches from the
+  collection root and becomes invisible *and* undeletable. `FoldersService` runs a
+  `WITH RECURSIVE` descendant check before the sibling lock; 409 on a hit.
+- **`IS NOT DISTINCT FROM`, never `=`, for a nullable parent in a sibling query.**
+  `"folderId" = $2` with `$2` NULL is never true, so every root-level item computes against
+  zero siblings and stacks at one position.
+- ⚠️ **Secrets are plaintext** in `requests.auth` and `environments.variables`, and go out on
+  the wire. Documented in the README as an accepted slice trade-off; do not treat the
+  `type="password"` inputs as protection.
+- `workspaces.ownerUserId ON DELETE CASCADE` is right only while every workspace is personal.
+  It is also what makes the e2e cleanup work, so changing it is a paired change.
+
+## Frontend workbench rules
+
+- Two shells: `AppShell` (centred `max-w-3xl`, used by `/tasks` and `/sessions`) and
+  `WorkbenchShell` (`h-screen overflow-hidden`, fixed sidebar, independently scrolling panes).
+  `AppHeader` takes one `wide` prop. ⚠️ `min-h-0` on the workbench grid and `<main>` is
+  load-bearing — a grid child defaults to `min-height: auto`, so without it the panes size to
+  content and the whole page scrolls.
+- **The workspace id lives in the URL, not Redux.** With no `localStorage`/`redux-persist`
+  allowed, an id in Redux does not survive a reload and every refresh would silently pick "the
+  first workspace" — invisible until a user has two.
+- **One `Tree` tag per workspace.** The tree is a single HTTP response, so a per-collection tag
+  could never cause a partial refetch. ⚠️ **Every mutation argument carries `workspaceId` even
+  though the server ignores it** — it is the invalidation key and there is no other way to
+  reach one from a mutation. Forgetting it presents as "the sidebar doesn't update until I
+  reload", which reads like a caching bug.
+- ⚠️ **`updateRequest` invalidates `Tree` only when `name` or `method` is in the patch.** They
+  are all the sidebar renders; invalidating on every save refetches the whole workspace each
+  time someone edits a header.
+- ⚠️ **`useRequestDraft` keys its seeding effect on `request?.id`, never `request`.** RTK Query
+  returns a new object identity on every background refetch, so depending on the object wipes
+  whatever the user was typing — intermittent, and presents as a dropped keystroke. There is no
+  autosave either: autosave plus a tree that invalidates on renames is a refetch storm.
+- ⚠️ **`NodeMenu` is `position: fixed` from `getBoundingClientRect()`, and flips above its row
+  when there is no space below.** The sidebar is an `overflow-y-auto` container, so an
+  absolutely-positioned menu on a bottom row is clipped and invisible; escaping that clip then
+  lets it run off the *viewport*, which hides the bottom items just as well. Both halves are
+  needed — the second was found by running the app, not by reading it.
+- `useExpanded` holds one `Set` at `Sidebar` level, not per node (collapsing a parent unmounts
+  its children, so reopening would reset every grandchild) and not in Redux. It resets on
+  reload; that is accepted.
+- **One optimistic update, and only one: inline rename**, via `treeApi.util.updateQueryData`
+  with `patch.undo()` in the catch. It is the only operation whose round trip is a visible
+  flicker on the element the user is looking at. Everything else refetches.
+- No icon library and no editor library — text glyphs (`▸ ▾ ⋯`) and a plain `<textarea>` with a
+  Format JSON button. Both are dependency decisions belonging to the execution slice.
+- **No Send button, not even a disabled one.** Deliberate; see `RequestUrlBar.tsx`.
+- Login and register default their post-auth `from` to `/`, not `/tasks`.
 
 ## Current state
 
@@ -253,6 +364,19 @@ is in `configure-app.ts`'s `exposedHeaders` — a cross-origin browser cannot re
   `throttler.config.spec.ts` covers the env-to-options wiring as a pure function. The token is
   imported from `@nestjs/throttler/dist/throttler.constants` because the package index does not
   re-export it. `auth.controller.spec.ts` stubs the guard with `.overrideGuard`.
+
+The **domain slice is complete on both sides**: workspaces + members, collections, folders,
+requests and environments, with a sidebar tree and a request editor that saves. See *Domain and
+tenancy* above for the rules and *Frontend workbench rules* for the client. Unit specs cover
+ordering, the scope fragments, provisioning, `build-tree`, the folder cycle check, the requests
+service and the jsonb constraints; `backend/test/workspaces.e2e-spec.ts` covers the API end to
+end, including cross-tenant isolation and the `VIEWER` role seam.
+
+Deliberately **not** built here, each for a stated reason: sending requests (its own security
+surface — see the README), any environment UI (nothing observable without interpolation),
+drag-and-drop (the `/move` endpoints exist and the kebab menu drives them; dnd is a
+pure-frontend change later), invites and a members pane (no unused UI), and organizations
+(the seam is one nullable column).
 
 Known gap, deliberate and noted in the README: **login and refresh are still unthrottled.** The
 machinery is in place, so it is a `@UseGuards` on each plus a decision about shared or separate
