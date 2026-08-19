@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Register Flow Review</title>
+<style>
+  :root {
+    --ground: #f6f8fb;
+    --surface: #ffffff;
+    --ink: #101828;
+    --ink-soft: #3d4a5f;
+    --muted: #64748b;
+    --line: #dbe2ec;
+    --line-soft: #e8edf4;
+    --accent: #4f46e5;
+    --accent-ink: #4338ca;
+    --accent-tint: #eef0fd;
+    --crit-fg: #b91c1c;
+    --crit-bg: #fdecec;
+    --high-fg: #b45309;
+    --high-bg: #fdf3e3;
+    --med-fg: #1d4ed8;
+    --med-bg: #e8effd;
+    --low-fg: #475569;
+    --low-bg: #eef2f7;
+    --code-bg: #eef2f7;
+    --ok-fg: #047857;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0c1220;
+      --surface: #121a2b;
+      --ink: #e6ebf3;
+      --ink-soft: #b8c2d3;
+      --muted: #8494ab;
+      --line: #26324a;
+      --line-soft: #1c2639;
+      --accent: #8b93f8;
+      --accent-ink: #a5abfa;
+      --accent-tint: #1a2140;
+      --crit-fg: #f2969b;
+      --crit-bg: #371a1e;
+      --high-fg: #eab55e;
+      --high-bg: #33250e;
+      --med-fg: #8ab2f7;
+      --med-bg: #16274a;
+      --low-fg: #a4b1c4;
+      --low-bg: #1d2739;
+      --code-bg: #1c2639;
+      --ok-fg: #4fc596;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0c1220;
+    --surface: #121a2b;
+    --ink: #e6ebf3;
+    --ink-soft: #b8c2d3;
+    --muted: #8494ab;
+    --line: #26324a;
+    --line-soft: #1c2639;
+    --accent: #8b93f8;
+    --accent-ink: #a5abfa;
+    --accent-tint: #1a2140;
+    --crit-fg: #f2969b;
+    --crit-bg: #371a1e;
+    --high-fg: #eab55e;
+    --high-bg: #33250e;
+    --med-fg: #8ab2f7;
+    --med-bg: #16274a;
+    --low-fg: #a4b1c4;
+    --low-bg: #1d2739;
+    --code-bg: #1c2639;
+    --ok-fg: #4fc596;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.9375rem;
+    line-height: 1.62;
+  }
+  .wrap {
+    max-width: 54rem;
+    margin: 0 auto;
+    padding: 3.25rem 1.5rem 4.5rem;
+  }
+  code, .file-ref {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.83em;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  a { color: var(--accent-ink); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  /* ---------- header ---------- */
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 0.6rem;
+  }
+  h1 {
+    font-size: 1.9rem;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    margin: 0 0 0.9rem;
+    text-wrap: balance;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.4rem;
+    font-size: 0.8125rem;
+    color: var(--muted);
+    margin: 0 0 2rem;
+  }
+  .meta .file-ref { color: var(--ink-soft); font-size: 0.8125rem; }
+
+  .verdict {
+    font-size: 1.02rem;
+    color: var(--ink-soft);
+    max-width: 46rem;
+    margin: 0 0 2.2rem;
+  }
+  .verdict strong { color: var(--ink); }
+
+  /* ---------- severity tally ---------- */
+  .tally {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0 0 2.2rem;
+  }
+  .tally-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.55rem 0.95rem;
+  }
+  .tally-item .n {
+    font-size: 1.35rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .tally-item .lbl {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .tally-item.crit .n { color: var(--crit-fg); }
+  .tally-item.high .n { color: var(--high-fg); }
+  .tally-item.med .n { color: var(--med-fg); }
+  .tally-item.low .n { color: var(--low-fg); }
+
+  /* ---------- fix first ---------- */
+  .fix-first {
+    background: var(--accent-tint);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.1rem 1.35rem 1.2rem;
+    margin: 0 0 3rem;
+  }
+  .fix-first h2 {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 0.55rem;
+  }
+  .fix-first ol {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: grid;
+    gap: 0.3rem;
+  }
+  .fix-first li::marker { color: var(--accent-ink); font-weight: 600; }
+
+  /* ---------- findings ---------- */
+  .findings-title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 0.4rem;
+  }
+  .finding {
+    border-top: 1px solid var(--line);
+    padding: 1.7rem 0 1.9rem;
+    display: grid;
+    grid-template-columns: 3rem 1fr;
+    gap: 0 1.1rem;
+  }
+  .finding:last-of-type { border-bottom: 1px solid var(--line); }
+  .finding .num {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    padding-top: 0.1rem;
+  }
+  .finding-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.7rem;
+    margin-bottom: 0.55rem;
+  }
+  .chip {
+    display: inline-block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.14rem 0.55rem;
+    border-radius: 999px;
+  }
+  .chip.crit { color: var(--crit-fg); background: var(--crit-bg); }
+  .chip.high { color: var(--high-fg); background: var(--high-bg); }
+  .chip.med  { color: var(--med-fg);  background: var(--med-bg); }
+  .chip.low  { color: var(--low-fg);  background: var(--low-bg); }
+  .cat {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .file-ref {
+    color: var(--ink-soft);
+    background: var(--code-bg);
+    padding: 0.14rem 0.5rem;
+    border-radius: 5px;
+  }
+  .finding h3 {
+    font-size: 1.08rem;
+    font-weight: 650;
+    letter-spacing: -0.005em;
+    line-height: 1.3;
+    margin: 0 0 0.6rem;
+    text-wrap: balance;
+  }
+  .finding p {
+    margin: 0 0 0.7rem;
+    max-width: 44rem;
+    color: var(--ink-soft);
+  }
+  .finding p:last-child { margin-bottom: 0; }
+  .fix-lead {
+    font-weight: 700;
+    color: var(--ok-fg);
+    letter-spacing: 0.02em;
+  }
+
+  /* ---------- footer ---------- */
+  .method {
+    margin-top: 3rem;
+    font-size: 0.8125rem;
+    color: var(--muted);
+    max-width: 44rem;
+  }
+  .method strong { color: var(--ink-soft); }
+
+  @media (max-width: 34rem) {
+    .finding { grid-template-columns: 1fr; }
+    .finding .num { padding: 0; margin-bottom: 0.3rem; }
+    h1 { font-size: 1.55rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Backend code review · postman-clone</p>
+    <h1>Register Flow Review</h1>
+    <div class="meta">
+      <span>Commit <span class="file-ref">82b9888</span>&nbsp; “feat: BE register flow added”</span>
+      <span>Reviewed 2026-08-19</span>
+      <span>11 findings, all confirmed</span>
+    </div>
+  </header>
+
+  <p class="verdict">
+    <strong>The skeleton is right; the commit shipped mid-work.</strong> The contract type, the
+    <code>@Public()</code> route behind <code>OriginCheckGuard</code>, the cookie set on success, keeping the
+    refresh token out of the body, and the bounded DTO validation all follow the house pattern. But the
+    duplicate-email path — the whole reason <code>EMAIL_TAKEN</code> was added — is a commented-out empty
+    try/catch, a <code>console.log</code> writes the Argon2 password hash to the logs on every signup, and
+    register hand-copied login’s tail while dropping two of its invariants. Most findings collapse on their
+    own once <code>register</code> is reshaped to mirror <code>login</code> exactly.
+  </p>
+
+  <div class="tally" role="group" aria-label="Findings by severity">
+    <div class="tally-item crit"><span class="n">3</span><span class="lbl">Critical</span></div>
+    <div class="tally-item high"><span class="n">3</span><span class="lbl">High</span></div>
+    <div class="tally-item med"><span class="n">1</span><span class="lbl">Medium</span></div>
+    <div class="tally-item low"><span class="n">4</span><span class="lbl">Low</span></div>
+  </div>
+
+  <section class="fix-first" aria-label="Fix before anything else">
+    <h2>Fix before anything else touches this route</h2>
+    <ol>
+      <li><a href="#f1">Delete the <code>console.log</code> that leaks password hashes</a></li>
+      <li><a href="#f2">Catch the unique-violation and throw 409 <code>EMAIL_TAKEN</code></a></li>
+      <li><a href="#f3">Mirror email normalization into login — it currently locks users out</a></li>
+    </ol>
+  </section>
+
+  <p class="findings-title">Findings, ranked by severity</p>
+
+  <article class="finding" id="f1">
+    <div class="num">01</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip crit">Critical</span>
+        <span class="cat">Security</span>
+        <span class="file-ref">backend/src/auth/auth.service.ts:60</span>
+      </div>
+      <h3>Password hash written to the logs on every registration</h3>
+      <p><code>console.log("created user", createdUser)</code> prints the full <code>UserEntity</code> —
+      Argon2 <code>passwordHash</code> and email included — to stdout. Everything on stdout lands in
+      <code>.dev/logs/backend</code> locally and in whatever aggregator production uses; logs are readable far
+      more widely than the database, so every signup hands out an offline-crackable hash, bypassing the
+      repo’s never-return-an-entity DTO discipline at the log layer.</p>
+      <p><span class="fix-lead">Fix</span> — delete the line. It is debug leftover, not something to convert
+      into a <code>Logger</code> call.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f2">
+    <div class="num">02</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip crit">Critical</span>
+        <span class="cat">Correctness</span>
+        <span class="file-ref">backend/src/auth/auth.service.ts:57</span>
+      </div>
+      <h3>Duplicate email returns 500 INTERNAL; <code>EMAIL_TAKEN</code> is never thrown</h3>
+      <p>The try/catch was left commented out, so the <code>users.email</code> unique violation escapes as a
+      raw <code>QueryFailedError</code> and <code>AllExceptionsFilter</code> collapses it to
+      <code>500&nbsp;{ code: 'INTERNAL' }</code> plus a stack trace in the error log. The client branches on
+      <code>code</code> and cannot show “email already in use” — the most common registration failure presents
+      as a server outage, and the <code>EMAIL_TAKEN</code> code added to contracts in this same commit has no
+      producer anywhere.</p>
+      <p><span class="fix-lead">Fix</span> — catch the Postgres unique-violation (driver code
+      <code>23505</code>) and throw the existing <code>ApiException.conflict</code> helper with
+      <code>EMAIL_TAKEN</code>. Keep relying on the DB constraint rather than a <code>findByEmail</code>
+      pre-check, so the path stays race-free under concurrent submits.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f3">
+    <div class="num">03</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip crit">Critical</span>
+        <span class="cat">Correctness</span>
+        <span class="file-ref">backend/src/auth/dto/register-dto.ts:8</span>
+      </div>
+      <h3>Register lowercases the email; login doesn’t — permanent lockout</h3>
+      <p><code>RegisterDto</code> normalizes with <code>trim().toLowerCase()</code> but <code>LoginDto</code>
+      passes the email through untouched, and <code>findByEmail</code> is an exact match. Register as
+      <code>Foo@Bar.com</code> and it is stored as <code>foo@bar.com</code>; log in later typing the identical
+      address and the lookup misses, the dummy-hash verify runs, and the correct password gets
+      <code>401 Invalid credentials</code> — forever, unless the user guesses to type lowercase.</p>
+      <p><span class="fix-lead">Fix</span> — one shared normalization applied to both DTOs (a shared decorator),
+      or normalize once in <code>AuthService</code> so register and login cannot drift.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f4">
+    <div class="num">04</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip high">High</span>
+        <span class="cat">Correctness</span>
+        <span class="file-ref">backend/src/auth/auth.controller.ts:88</span>
+      </div>
+      <h3>Register skips the presented-cookie revocation that login performs</h3>
+      <p>Login reads the browser’s refresh cookie and revokes the session behind it before overwriting the
+      single browser-wide cookie slot — a 12-line comment in <code>AuthService.login</code> explains why.
+      Register never calls <code>readRefreshCookie</code>, so registering account B in a browser signed in as
+      user A leaves A’s session alive for its full 30-day life: a ghost device in <code>GET /sessions</code>
+      whose “Revoke” does nothing observable, exactly the bug login just fixed.</p>
+      <p><span class="fix-lead">Fix</span> — pass the cookie into <code>register</code> and revoke before
+      issuing, as login does. Better: extract one private revoke→create→issue tail both methods call, so the
+      invariant lives in one place instead of a hand-copy.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f5">
+    <div class="num">05</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip high">High</span>
+        <span class="cat">Correctness</span>
+        <span class="file-ref">backend/src/auth/dto/register-dto.ts:8</span>
+      </div>
+      <h3>Unguarded <code>@Transform</code> turns a malformed body into a 500</h3>
+      <p>Transforms run before validation, and <code>value.trim()</code> has no string guard — so a body of
+      <code>{"email": 123}</code> throws <code>TypeError</code> inside the <code>ValidationPipe</code> and
+      surfaces as <code>500 INTERNAL</code> on a public, unauthenticated route. <code>LoginDto</code>, with no
+      transform, correctly returns the 400 <code>VALIDATION</code> envelope for the same input.</p>
+      <p><span class="fix-lead">Fix</span> —
+      <code>typeof value === 'string' ? value.trim().toLowerCase() : value</code>, letting
+      <code>@IsEmail</code> reject non-strings through the normal validation path.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f6">
+    <div class="num">06</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip high">High</span>
+        <span class="cat">Correctness</span>
+        <span class="file-ref">backend/src/auth/auth.controller.ts:98</span>
+      </div>
+      <h3>A fall-through path answers 200 OK with an empty body</h3>
+      <p>The service’s dead <code>if (createdUser?.id) … else {}</code> widens its return type to
+      <code>IssuedAuth | undefined</code>, and the controller’s <code>if (issued?.refreshToken)</code> guard
+      lets the handler fall off the end: HTTP 200, empty body, no cookie. The frontend treats any 2xx as
+      signed-in and crashes reading <code>accessToken</code>/<code>user</code> off <code>undefined</code> —
+      a failure dressed as success. One restored-and-swallowing try/catch away from being a live path.</p>
+      <p><span class="fix-lead">Fix</span> — declare <code>register(): Promise&lt;IssuedAuth&gt;</code>, delete
+      the branches (<code>usersService.create</code> either returns an entity or throws), and make the
+      controller tail unconditional like login’s. The compiler then enforces a total response.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f7">
+    <div class="num">07</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip med">Medium</span>
+        <span class="cat">Test coverage</span>
+        <span class="file-ref">backend/src/auth/auth.controller.ts:82</span>
+      </div>
+      <h3>No tests shipped with the route</h3>
+      <p>No unit spec, no e2e case, no extension to the existing auth specs. Every finding above would be
+      caught by the e2e shapes the plan already prescribes: register → 201 + cookie + the token works on
+      <code>GET /tasks</code>; duplicate register → 409 <code>EMAIL_TAKEN</code>; case-variant duplicate → 409;
+      register from a logged-in agent → the old session’s token 401s. Mind the cleanup: these tests create
+      <em>users</em>, so <code>afterAll</code> must delete them, not just sessions.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f8">
+    <div class="num">08</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip low">Low</span>
+        <span class="cat">Simplification</span>
+        <span class="file-ref">backend/src/users/users.service.ts:24</span>
+      </div>
+      <h3>A single INSERT wrapped in an un-awaited transaction</h3>
+      <p>One statement is already atomic, so the wrapper buys nothing and costs BEGIN/COMMIT round-trips plus
+      a dedicated pooled connection per signup. The <code>transaction(...)</code> call is also never awaited
+      inside the method — it only works because the async function’s implicit return awaits the promise; any
+      post-processing added before the return would dereference a <code>Promise</code>.</p>
+      <p><span class="fix-lead">Fix</span> —
+      <code>return this.usersRepository.save(this.usersRepository.create({ email, passwordHash, name }))</code>.
+      That single save is also the natural place to catch <code>23505</code> for finding 02.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f9">
+    <div class="num">09</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip low">Low</span>
+        <span class="cat">Simplification</span>
+        <span class="file-ref">backend/src/auth/auth.service.ts:56</span>
+      </div>
+      <h3>Dead scaffolding shipped in the service</h3>
+      <p><code>let createdUser = null</code> immediately reassigned, an empty commented-out try/catch, and an
+      empty <code>else</code> branch. Together they make null-handling look intentional where null is
+      impossible — and make the duplicate-email path look handled when it is not, so the reader who should add
+      the real catch assumes it exists.</p>
+      <p><span class="fix-lead">Fix</span> — flatten to straight-line <code>const</code> code. The only branch
+      register needs is the real <code>23505</code> → <code>EMAIL_TAKEN</code> catch.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f10">
+    <div class="num">10</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip low">Low</span>
+        <span class="cat">API design</span>
+        <span class="file-ref">backend/src/auth/auth.controller.ts:82</span>
+      </div>
+      <h3>200 where 201 belongs</h3>
+      <p>Register creates a resource; <code>@HttpCode(HttpStatus.OK)</code> makes it indistinguishable from
+      login’s deliberate 200 in monitoring and to API consumers — “new account created” and “existing
+      credentials exchanged” read identically. One decorator change while the route is young and unconsumed.</p>
+    </div>
+  </article>
+
+  <article class="finding" id="f11">
+    <div class="num">11</div>
+    <div>
+      <div class="finding-head">
+        <span class="chip low">Low</span>
+        <span class="cat">Style</span>
+        <span class="file-ref">backend/src/auth/auth.controller.ts:41</span>
+      </div>
+      <h3>Whitespace churn in files the feature doesn’t touch</h3>
+      <p>Constructors reformatted <code>{}</code> → <code>{ }</code> in three files the commit otherwise leaves
+      alone, and <code>register-dto.ts</code> is missing its trailing newline. CLAUDE.md’s rule is to match the
+      file being edited, not reformat it: the hunks widen the diff, invite merge conflicts, and repoint
+      <code>git blame</code> on untouched constructor lines at this commit.</p>
+      <p><span class="fix-lead">Fix</span> — revert the three whitespace hunks; add the EOF newline.</p>
+    </div>
+  </article>
+
+  <p class="method"><strong>Method.</strong> Eight independent review angles ran over commit
+  <span class="file-ref">82b9888</span> — line-by-line scan, removed-behavior audit, cross-file tracing,
+  CLAUDE.md conventions, reuse, simplification, efficiency, and altitude — and every reported finding was then
+  verified directly against the working tree. Findings the angles raised that did not survive verification
+  (e.g. <code>RegisterDto</code> lacking an <code>implements</code> clause, which matches existing
+  <code>LoginDto</code> practice) were dropped.</p>
+</div>
+</body>
+</html>
