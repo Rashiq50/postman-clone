@@ -49,6 +49,10 @@ match today's backend — finish the backend.*
 
 **Part 1 — Contracts: done.** `packages/contracts/src/auth.ts` created with all four interfaces
 exactly as specified, exported from `index.ts` after `./api`, and `dist/` re-synced into both apps.
+*(The re-sync had in fact been skipped when this was first written — risk #5 live in the wild. Caught
+in review and fixed 2026-08-19 by re-running `cd frontend && yarn install`, whose postinstall rebuilt
+and copied contracts into both apps; the same install also restored `react-router`, which was in
+`package.json`/`yarn.lock` but missing from `node_modules`.)*
 
 **Part 2 — Backend: not started**, with one exception taken out of order:
 
@@ -100,20 +104,27 @@ the §3.8 multi-tab docblock.
 Still owed once Part 2 lands: the README's 7 new routes and the backend half of the CLAUDE.md
 rewrite listed under *Docs last*.
 
-**Verification run so far:** `cd frontend && yarn lint && yarn build` — both pass. No frontend test
+**Verification run so far:** `cd frontend && yarn lint && yarn build` — both pass (re-verified
+2026-08-19 after the contracts re-sync and `yarn install` above; before that, both failed on the
+missing `auth` contract types and missing `react-router`). No frontend test
 runner exists, so there are no frontend unit tests to add. Backend specs and `test:e2e` are
 untouched and will break exactly as the table below predicts once Part 2 starts. Manual steps 1–11
 are not runnable until then.
 
-**Two environment landmines to clear before the first end-to-end login:**
+**Environment state (re-verified against the tree 2026-08-19 — this section previously described
+both items wrongly):**
 
-- `backend/.env` has `AUTH_COOKIE_NAME=__Host-refresh`. The `__Host-` prefix requires `Path=/`,
-  which §2.6 deliberately does not use — the browser will silently ignore the cookie, producing a
-  login that appears to work and then never authenticates. `.env.example`'s `pc_refresh_token` is
-  the correct value.
-- `frontend/.env` sets `VITE_API_URL=http://localhost:3000/api`, which bypasses the Vite proxy and
-  makes every dev request cross-origin. `.env.example` says to leave it unset in development;
-  unsetting it also removes CORS from the picture entirely.
+- `backend/.env` has `AUTH_COOKIE_NAME=_HOST-token` — a **malformed** cookie prefix (single
+  underscore, uppercase), not the `__Host-refresh` this section used to claim. Accidentally
+  harmless: browsers apply prefix semantics only to a literal `__Host-`/`__Secure-` start, so
+  this cookie will work fine with §2.6's `Path=/api/v1/auth`. Still, change it to
+  `.env.example`'s `pc_refresh_token` before Part 2, so nobody later "fixes" the name into a real
+  `__Host-` prefix — which §2.6's path deliberately rules out.
+- `frontend/.env` does not exist, so the `VITE_API_URL` landmine previously described here is
+  already cleared. Keep it that way in dev — the Vite proxy makes every request same-origin.
+- Drift to reconcile while touching `.env`: it sets `REFRESH_TOKEN_EXPIRES_IN=7d` where
+  `.env.example` says `30d`, and the prose in §2.8a/§3.8 assumes 30-day sessions. Either value
+  works; make the files agree.
 
 ---
 
@@ -378,7 +389,8 @@ other refresh failure (§2.8, deliberate). That is already the documented conver
 At a cap of 10 a real user will effectively never see it; credential stuffing will.
 
 This also bounds — but does not replace — the orphaned-session problem in §3.8. The cap is the
-backstop; revoking the presented cookie's session on login is the precise fix. Take both.
+backstop; revoking the presented cookie's session on login (§2.9) is the precise fix. Both are
+in scope.
 
 **Expiry is absolute, never sliding.** `sessions.expiresAt` is set at login and never extended;
 each child token inherits it. Sliding expiry means a stolen token grants indefinite access, which
@@ -400,13 +412,19 @@ Inside the transaction, on `tokenHash = sha256(rawToken)`:
 2. No row → `invalid`, revoke nothing (a random guess must not be able to kill a session).
 3. `revokedAt` set → `invalid`, revoke nothing (family already dead).
 4. `usedAt` set:
-   - within `REFRESH_ROTATION_GRACE_MS` → **benign race** (two tabs). Fall through to the happy
-     path and mint another child off the same parent. Two live siblings briefly exist; both belong
-     to the same revocable session, so this is harmless.
+   - within `REFRESH_ROTATION_GRACE_MS` → **benign race** (two tabs). Mint another child off the
+     same parent, but **leave the old row untouched — do not re-stamp `usedAt` and do not
+     overwrite `replacedByTokenId`.** The grace window must stay anchored at the *first* use:
+     re-stamping `usedAt` here would slide the window forward on every replay, so an attacker
+     replaying a stolen token every `grace − ε` would read as "benign" forever and reuse
+     detection would never fire. (Leaving `replacedByTokenId` pointing at the first child also
+     keeps the forensic chain intact.) Two live siblings briefly exist; both belong to the same
+     revocable session, so this is harmless.
    - otherwise → **`reuse`**.
 5. Session revoked/expired, or token expired → `invalid`, revoke nothing (expiry is not theft).
-6. Happy path: set `usedAt = now` on the old row; insert a new row (fresh 32 bytes, `expiresAt =
-   session.expiresAt`); set `old.replacedByTokenId`; `UPDATE sessions SET lastUsedAt = now()`.
+6. Happy path (`usedAt` null): set `usedAt = now` on the old row; insert a new row (fresh 32
+   bytes, `expiresAt = session.expiresAt`); set `old.replacedByTokenId`; `UPDATE sessions SET
+   lastUsedAt = now()`.
 
 ### ⚠️ The rollback trap — put this in a code comment
 
@@ -449,13 +467,23 @@ not a thief."
 Keep `DUMMY_PASSWORD_HASH` and `createToken` **byte-identical** — five spec cases pin `createToken`.
 
 ```ts
-login(email, password, context?): Promise<IssuedAuth & { user: UserEntity }>
+login(email, password, context?, presentedRefreshToken?): Promise<IssuedAuth & { user: UserEntity }>
 refresh(rawRefreshToken: string | undefined): Promise<IssuedAuth & { user: UserEntity }>
 logout(rawRefreshToken: string | undefined): Promise<void>   // resolves on undefined, never throws
 logoutAll(userId): Promise<void>
 me(userId): Promise<UserEntity>                              // null → Unauthorized, not NotFound
 createToken(userId, sessionId): string                       // unchanged
 ```
+
+**`login` takes the refresh cookie the browser presented, and revokes its session** — after the
+password check succeeds and before `sessionsService.create`, call
+`sessionsService.revokeByRefreshToken(presentedRefreshToken)` when the cookie is present. This is
+the same-browser orphan fix from §3.8, **in scope, not optional**: the cookie slot is about to be
+overwritten, so the session behind it would otherwise sit unrevoked for its full lifetime as a
+ghost device. It is precise — the only way to present that cookie is to *be* the browser being
+overwritten, so other devices are untouched — and safe, because `revokeByRefreshToken` is
+idempotent and never throws, so a stale or foreign cookie cannot break login. Revoke only after
+the password check: an unauthenticated `POST /auth/login` must not be able to kill a session.
 
 The service returns the **raw** refresh token to the controller; cookies are HTTP plumbing and
 keeping them out preserves the seam that makes `auth.service.spec.ts` meaningful.
@@ -502,7 +530,9 @@ Change `@Controller('auth')` → `@Controller({ path: 'auth', version: API_VERSI
   handler hangs after setting the cookie.
 - **Login no longer returns `refreshToken` in the body.** Verified: nothing in the repo consumes it.
   Login also becomes 201 → 200; nothing asserts 201.
-- `login` collects `{ userAgent: req.header('user-agent')?.slice(0, 512) ?? null, ipAddress: req.ip ?? null }`.
+- `login` collects `{ userAgent: req.header('user-agent')?.slice(0, 512) ?? null, ipAddress: req.ip ?? null }`
+  and passes `readRefreshCookie(req, config)` as `presentedRefreshToken` (§2.9's same-browser
+  session revocation).
   ⚠️ `req.ip` is the **proxy's** address unless `trust proxy` is set, which `main.ts` does not do.
   Comment it; wiring it needs `NestExpressApplication` and is a separate deployment change.
 - `logout` is `@Public()` and reads the cookie, never `@CurrentUser()` — a protected logout 401s
@@ -805,13 +835,14 @@ token is simply now unreachable, so it sits `revokedAt IS NULL, expiresAt > now(
 30 days and shows up as a **ghost device in `GET /sessions`** that the user cannot recognise and
 whose "Revoke" does nothing observable. Every re-login in the same browser leaves one behind.
 
-**Optional cheap mitigation (recommend taking it — ~6 lines in `AuthService.login`):** read the
-refresh cookie on the login request; if it resolves to a live session, revoke that session before
-issuing the new one. Precise, because the only way to present that cookie is to *be* the browser
-whose token is about to be overwritten. It does not touch other devices — they have their own
-cookies. Add an e2e case: log in twice with the same agent → `GET /sessions` has `meta.total === 1`.
+**Mitigation — in scope, implemented in §2.9's `login`:** read the refresh cookie on the login
+request; if it resolves to a live session, revoke that session before issuing the new one.
+Precise, because the only way to present that cookie is to *be* the browser whose token is about
+to be overwritten. It does not touch other devices — they have their own cookies. E2e coverage
+lives in Verification step 6 (same-agent double login → `meta.total === 1`).
 
-Without this, add a `MAX_SESSIONS_PER_USER` cap or accept the ghosts and say so on the devices page.
+The `MAX_SESSIONS_PER_USER` cap (§2.8a) remains the backstop for every leak path this precise fix
+doesn't cover.
 
 ---
 
@@ -872,12 +903,19 @@ cookie jar):
    also dead (refresh → 401) **and** the previously-valid access token 401s with `Session is no
    longer active`. That last assertion proves rotation, family revocation, and the guard all line
    up. Run with `REFRESH_ROTATION_GRACE_MS=0` — this is exactly why it is an env var. Add a sibling
-   case at the default grace asserting a fast replay is *accepted*.
+   case at the default grace asserting a fast replay is *accepted* — and that a further replay of
+   the same token **after** the grace window (measured from its *first* use) is rejected and
+   revokes the family. That last assertion is what catches a sliding-window implementation, i.e.
+   one that re-stamps `usedAt` on the grace path (§2.8 step 4).
 4. Logout → 204 + expired cookie → the still-unexpired access token now 401s.
 5. Logout-all: two agents, same user → logout-all from A → B's `/tasks` **and** B's refresh both 401.
-6. Sessions: two logins → `meta.total === 2`, exactly one `current: true` → DELETE the other → 204,
-   total 1. Random UUID → 404. Non-UUID → 400 from `ParseUUIDPipe`.
-7. **Session cap (§2.8a):** run with `MAX_SESSIONS_PER_USER=3`, log in four times → `GET /sessions`
+6. Sessions: two logins **from two separate agents** (fresh cookie jars — a second login from the
+   *same* agent presents the first login's cookie and §2.9 revokes that session, leaving total at
+   1) → `meta.total === 2`, exactly one `current: true` → DELETE the other → 204, total 1. Random
+   UUID → 404. Non-UUID → 400 from `ParseUUIDPipe`. Then the §2.9 counterpart: log in twice with
+   the **same** agent → `meta.total === 1`.
+7. **Session cap (§2.8a):** run with `MAX_SESSIONS_PER_USER=3`, log in four times — **each from a
+   fresh agent**, or the §2.9 same-browser revocation, not the cap, is what trims the list → `GET /sessions`
    `meta.total === 3`, the first login's access token now 401s with `Session is no longer active`,
    and its row still exists in the DB with `revokedAt` set (**revoked, not deleted** — query it
    directly; the list endpoint filters it out, so the assertion has to go past the API). Then a
@@ -921,9 +959,8 @@ lists "e2e test database" as a known gap; this makes it start to matter.
     browser, sign out in tab A. Tab B must keep working until its access token expires, then land on
     `/login`. That lag is correct — confirm it matches the documented behaviour rather than looking
     like a bug. Then, in one tab, throttle the network, force a 401 so a refresh hangs, and sign in
-    from the other tab: the fresh login must **survive** (the §3.3 token snapshot). Finally, if the
-    login-revokes-the-cookie's-session mitigation is taken, log in twice in one browser and confirm
-    `GET /sessions` shows one row, not two.
+    from the other tab: the fresh login must **survive** (the §3.3 token snapshot). Finally, log in twice in one browser and
+    confirm `GET /sessions` shows one row, not two (the §2.9 same-browser revocation).
 
 Restore `JWT_ACCESS_EXPIRES_IN` to `15m` afterwards.
 
