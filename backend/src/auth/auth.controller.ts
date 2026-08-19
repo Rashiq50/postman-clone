@@ -25,6 +25,7 @@ import {
   readRefreshCookie,
   setRefreshCookie,
 } from './refresh-cookie';
+import { RegisterDto } from './dto/register-dto';
 
 /**
  * `@Res({ passthrough: true })` on every handler that touches a cookie is
@@ -37,7 +38,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   /** Public by necessity: this is where a caller with no token gets one. */
   @Public()
@@ -61,8 +62,6 @@ export class AuthController {
         // then, treat the address in the session list as indicative.
         ipAddress: req.ip ?? null,
       },
-      // The cookie this browser presented, if any. Its session is revoked
-      // before the new one is issued — see AuthService.login.
       readRefreshCookie(req, this.configService),
     );
 
@@ -75,6 +74,38 @@ export class AuthController {
 
     // Note the refresh token is *not* in this body. It goes in the cookie only.
     return AuthResponseDto.from(issued);
+  }
+
+  @Public()
+  @UseGuards(OriginCheckGuard)
+  @Post('register')
+  @HttpCode(HttpStatus.OK)
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const issued = await this.authService.register(
+      registerDto.email,
+      registerDto.name,
+      registerDto.password,
+      {
+        userAgent: req.header('user-agent')?.slice(0, 512) ?? null,
+        ipAddress: req.ip ?? null,
+      },
+    )
+
+    if (issued?.refreshToken) {
+      setRefreshCookie(
+        res,
+        this.configService,
+        issued.refreshToken,
+        issued.refreshExpiresAt,
+      );
+
+      return AuthResponseDto.from(issued);
+    }
+
   }
 
   /**

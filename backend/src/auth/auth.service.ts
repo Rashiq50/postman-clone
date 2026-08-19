@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
-import { verifyPassword } from '../common/crypto/password';
+import { hashPassword, verifyPassword } from '../common/crypto/password';
 import type { SessionContext } from '../sessions/sessions.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { UserEntity } from '../users/entities/user.entity';
@@ -44,7 +44,33 @@ export class AuthService {
     private readonly sessionsService: SessionsService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
+
+  async register(
+    email: string,
+    name: string,
+    password: string,
+    context?: SessionContext,
+  ) {
+    const hashedPassword = await hashPassword(password);
+    let createdUser = null;
+    createdUser = await this.usersService.create(
+      email, hashedPassword, name
+    )
+    console.log("created user", createdUser);
+    // try {
+    // } catch (error) {
+    // }
+    if (createdUser?.id) {
+      const { session, refreshToken, expiresAt } =
+        await this.sessionsService.create(createdUser.id, context);
+
+      return this.issue(createdUser, session.id, refreshToken, expiresAt);
+    }
+    else {
+
+    }
+  }
 
   async login(
     email: string,

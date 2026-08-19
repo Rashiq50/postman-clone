@@ -20,6 +20,8 @@ export const ApiErrorCode = {
   RATE_LIMITED: 'RATE_LIMITED',
   /** Unexpected server fault. Never carries internal detail. */
   INTERNAL: 'INTERNAL',
+
+  EMAIL_TAKEN: 'EMAIL_TAKEN',
 } as const;
 
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];

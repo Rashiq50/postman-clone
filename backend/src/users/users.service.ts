@@ -14,7 +14,28 @@ export class UsersService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly usersRepository: Repository<UserEntity>,
-  ) {}
+  ) { }
+
+  async create(
+    email: string,
+    passwordHash: string,
+    name: string,
+  ) {
+    const user = this.usersRepository.manager.transaction(
+      async (manager) => {
+        const created = manager.create(UserEntity, {
+          email,
+          passwordHash,
+          name,
+        });
+        await manager.save(created);
+        return created;
+      },
+    )
+
+    return user;
+
+  }
 
   findById(id: string): Promise<UserEntity | null> {
     return this.usersRepository.findOne({ where: { id } });
