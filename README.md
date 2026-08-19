@@ -100,6 +100,7 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 
 | Method | Route | Body | Response |
 | --- | --- | --- | --- |
+| `POST` | `/api/v1/auth/register` | `{ email, password, name }` | `AuthResponse` (201) + refresh cookie |
 | `POST` | `/api/v1/auth/login` | `{ email, password }` | `AuthResponse` (200) + refresh cookie |
 | `POST` | `/api/v1/auth/refresh` | — | `AuthResponse` (200) + rotated cookie |
 | `POST` | `/api/v1/auth/logout` | — | 204, cookie cleared |
@@ -183,6 +184,25 @@ so a new endpoint is protected unless it carries `@Public()`. Forgetting `@Publi
 genuinely public route is the failure mode here, not the reverse — and an e2e test fails if the
 global guard is ever removed.
 
+**Registration ends in the same state as a login.** `POST /auth/register` creates the account and
+then signs it in through the same session-issuing path `login` uses, so there is one place that
+mints sessions and one place that sets the cookie. It answers 201 (it creates a resource) where
+login answers 200, and like login it revokes the session behind any refresh cookie the browser
+presents, since the response is about to overwrite that single cookie slot.
+
+Duplicates are detected by the unique index on `users.email`, not by a `findByEmail` pre-check —
+a check-then-insert races under concurrent submits and the constraint cannot. The violation is
+caught and returned as `409 EMAIL_TAKEN`, a distinct code so a client can say "that email is
+already in use" instead of showing a generic failure. **Accepted trade-off:** that reply confirms
+which addresses are registered, so `AuthService.login`'s dummy-hash timing defence is now
+defence-in-depth rather than a real secrecy boundary. Rate limiting, not silence, is the
+mitigation for bulk enumeration — see the known gap below.
+
+Email is normalized (trimmed and lowercased) by a shared `@NormalizeEmail()` decorator applied to
+**both** `RegisterDto` and `LoginDto`. Applying it to only one is a silent lockout: `findByEmail`
+is an exact match, so an account registered as `Foo@Bar.com` could never be reached by a login
+typing the same thing.
+
 **Two token types, two lifetimes.** A short-lived JWT access token goes in the response body
 and is sent as `Authorization: Bearer …`. The long-lived refresh token never appears in a
 response body at all — it travels only in an httpOnly cookie scoped to `Path=/api/v1/auth`, so
@@ -226,11 +246,15 @@ collecting them once `expiresAt` passes, and is deliberately not wired to a sche
 definition — so their only credential is an automatically-attached cookie. `SameSite=Lax`
 closes this, since both are POST-only and unreachable by top-level navigation. An
 `OriginCheckGuard` rejects a present-but-foreign `Origin` as a second layer, so the protection
-does not silently depend on `COOKIE_SAME_SITE` never becoming `none`.
+does not silently depend on `COOKIE_SAME_SITE` never becoming `none`. `/auth/register` and
+`/auth/login` carry the same guard: a cross-site POST that silently signs a victim's browser
+into an attacker-controlled account is the login-CSRF variant of the same problem.
 
-**Known gap:** nothing rate-limits login or refresh. `RATE_LIMITED` exists in `ApiErrorCode`
-and has no producer; `@nestjs/throttler` is not a dependency. Both endpoints are
-brute-forceable, and the session cap bounds stored rows but not attempts.
+**Known gap:** nothing rate-limits register, login or refresh. `RATE_LIMITED` exists in
+`ApiErrorCode` and has no producer; `@nestjs/throttler` is not a dependency. All three are
+brute-forceable, the session cap bounds stored rows but not attempts, and register is
+additionally an email-enumeration oracle by design (see above) — which makes throttling it the
+higher-value half of closing this gap.
 
 ## Frontend
 

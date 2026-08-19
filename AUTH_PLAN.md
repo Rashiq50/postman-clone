@@ -24,7 +24,7 @@ app logs in, silently restores its session on reload, and transparently refreshe
 
 | Decision | Choice |
 |---|---|
-| Scope | Backend **and** frontend, one pass. No registration endpoint. |
+| Scope | Backend **and** frontend, one pass. No registration endpoint. *(Superseded — a backend register flow was added afterwards; see Part 4.)* |
 | Refresh handling | Rotate every use, **with reuse detection** (replay ⇒ revoke the whole family) |
 | Rotation schema | Separate `refresh_tokens` child table (see below), **not** lineage columns on `sessions` |
 | Frontend token storage | In-memory Redux slice; silent refresh on boot. Never localStorage. |
@@ -40,11 +40,12 @@ replaced the session row, every access token would die the instant the client re
 
 ---
 
-## Progress — all three parts done
+## Progress — all three parts done, plus a backend register flow (Part 4)
 
 *Last updated 2026-08-19. Backend, frontend and contracts are complete and wired to each other.
 The sections below are kept as the record of what was decided and why; where the implementation
-departed from the letter of the plan, that is noted inline.*
+departed from the letter of the plan, that is noted inline. Registration was **not** in the
+original scope and was added afterwards — it has its own section, [Part 4](#part-4--registration-backend-only), at the end.*
 
 **Part 1 — Contracts: done.** `packages/contracts/src/auth.ts` with all four interfaces exactly
 as specified, exported from `index.ts` after `./api`, `dist/` synced into both apps.
@@ -966,10 +967,83 @@ Restore `JWT_ACCESS_EXPIRES_IN` to `15m` afterwards.
 5. **Forgetting `./dev.sh contracts`** — contracts are copied, not linked, so both sides keep
    compiling against a stale `dist/` and the `implements` clause silently stops guarding anything.
 6. **Session growth — now handled in scope** by `MAX_SESSIONS_PER_USER` (§2.8a). Rate limiting
-   remains out of scope: the cap bounds stored rows, but nothing yet bounds *attempts*, so login and
-   refresh are still brute-forceable and `RATE_LIMITED` still has no producer. README follow-up.
+   remains out of scope: the cap bounds stored rows, but nothing yet bounds *attempts*, so register,
+   login and refresh are all brute-forceable and `RATE_LIMITED` still has no producer. README
+   follow-up. Part 4 raised the stakes — register is an email-enumeration oracle by design.
 7. **Moving `baseApi`** contradicts the literal text of CLAUDE.md and README — the doc edit must land
    in the same change.
 8. **Cross-tab logout is not synchronous, by design (§3.8).** Other tabs converge by access-token
    expiry, not by broadcast. The likely future misreading is "logout in one tab logs out all tabs" —
    it does not. Documented in `authSlice.ts` and CLAUDE.md rather than fixed with `BroadcastChannel`.
+
+---
+
+# Part 4 — Registration (backend only)
+
+*Added after Parts 1–3 shipped, superseding the "no registration endpoint" scope decision. Built
+in commit `82b9888`, then reviewed; the findings below were fixed on 2026-08-19. **Not yet
+tested, and no frontend consumes it.***
+
+## 4.1 What was built
+
+**Guiding rule: register = create the user, then become login.** One session-issuing path, one
+place that sets the cookie. Everything below falls out of that.
+
+| Layer | Change |
+|---|---|
+| Contracts | `RegisterInput { email; password; name }`; `EMAIL_TAKEN` added to `ApiErrorCode`. Response is the existing `AuthResponse` — register returns exactly what login returns |
+| DTO | `RegisterDto` (`@MinLength(8)`/`@MaxLength(256)` password, bounded name/email) + the shared `@NormalizeEmail()` decorator, applied to `LoginDto` too |
+| Service | `AuthService.register(email, name, password, context?, presentedRefreshToken?): Promise<IssuedAuth>` — Argon2id hash → `usersService.create` → catch `23505` → revoke presented cookie's session → `issue(...)` |
+| Users | `UsersService.create(email, passwordHash, name)` — one `repository.save`, no transaction |
+| Controller | `POST /auth/register`, `@Public()` + `OriginCheckGuard`, `@HttpCode(CREATED)`, cookie set via `setRefreshCookie`, returns `AuthResponseDto` |
+
+## 4.2 The invariants that must not drift
+
+Each of these was a real review finding, not a hypothetical:
+
+- **`register` returns a total `Promise<IssuedAuth>`, like `login`.** The first version had a dead
+  `if (createdUser?.id) … else {}` that widened the type to `| undefined`, and a matching
+  `if (issued?.refreshToken)` guard in the controller that fell through to **HTTP 200 with an
+  empty body and no cookie** — a failure the client reads as success. Keep both tails
+  unconditional and let the compiler enforce a response.
+- **Duplicates are caught, never pre-checked.** The unique index on `users.email` is the check;
+  `register` maps Postgres `23505` to `409 EMAIL_TAKEN`. A `findByEmail`-then-insert races under
+  concurrent submits. (The first version left the `try/catch` commented out, so a duplicate was a
+  `500 INTERNAL` and the new `EMAIL_TAKEN` code had no producer at all.)
+- **Email normalization is shared.** `@NormalizeEmail()` on **both** DTOs. Register-only
+  normalization is a silent permanent lockout: `findByEmail` is an exact match, so an account
+  stored as `foo@bar.com` is unreachable by a login typing `Foo@Bar.com`. The decorator also
+  passes non-strings through — transforms run *before* validators, so an unguarded `.trim()`
+  turns a malformed body into a 500 where `@IsEmail` would have given a clean 400.
+- **Register revokes the presented cookie's session**, exactly as §2.9's `login` does, and for the
+  same reason: the response overwrites the single browser-wide cookie slot, so the old session
+  would otherwise ghost in `GET /sessions` for its full lifetime. Revoke only *after* the user is
+  created — a failed registration must not be able to kill a session.
+- **Never log the user entity.** The first version's `console.log("created user", createdUser)`
+  wrote the Argon2 `passwordHash` to `.dev/logs/` on every signup. The DTO boundary keeps hashes
+  off the wire; the log layer has no such guard.
+
+## 4.3 Accepted trade-off — enumeration
+
+`409 EMAIL_TAKEN` tells a caller which addresses are registered, which is exactly what
+`AuthService.login`'s dummy-hash timing defence exists to hide. This is deliberate: the
+enumeration-safe alternative ("check your email to continue") needs a mailer, and this repo has
+none. Consequence to keep written down: **the dummy-hash defence is now defence-in-depth, not a
+secrecy boundary**, and rate limiting is the real mitigation for bulk enumeration. Don't "fix"
+either side to match the other.
+
+## 4.4 Still owed
+
+1. **Tests.** Unit: happy path issues a session; `23505` → 409 with the right `code`. E2e
+   (`request.agent`): register → 201, `Set-Cookie` with the standard attributes, **no
+   `refreshToken` in the body**, and the returned access token works on `GET /tasks` — that last
+   assertion proves the auto-login end to end. Duplicate → 409. Case-variant duplicate
+   (`USER@x.com`) → 409, which pins the normalization. Register from an agent already logged in as
+   someone else → the old session's access token now 401s. ⚠️ These create **users**, so the
+   cleanup must delete them, not just sessions — the scratch-database gap gets one notch worse.
+2. **Frontend.** A `register` mutation in `authApi` (with `onQueryStarted → credentialsReceived`,
+   never `extraReducers`), `'register'` added to `NEVER_REAUTH`, and a `RegisterPage` mirroring
+   `LoginPage` — `resetApiState()` in the submit handler, `fieldErrors` from `api-error.ts`,
+   `<Navigate to="/tasks" replace />` if already authenticated, public route beside `/login`.
+3. **Rate limiting**, which risk #6 already tracks — register makes it more pressing, since it is
+   now an enumeration oracle as well as a brute-force surface.

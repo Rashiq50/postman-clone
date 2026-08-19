@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The root [README.md](README.md) is the authoritative reference for the API surface, error
 envelope, dev.sh commands and rationale — read it before changing anything in those areas.
-This file covers what the README does not: auth internals and the current half-built state.
+This file covers what the README does not: auth internals and the current state of the work.
 (`backend/README.md` and `frontend/README.md` are untouched framework boilerplate — ignore them.)
 
 ## Commands
@@ -76,7 +76,30 @@ The e2e test asserts this — it fails if the global guard is removed.
   **SHA-256** for refresh tokens ([common/crypto/sha256.ts](backend/src/common/crypto/sha256.ts)),
   which are 32 random bytes and need speed, not stretching. Don't merge them.
 - `AuthService.login` verifies against a dummy Argon2 hash when no user matches, to keep timing
-  flat and avoid leaking which emails are registered.
+  flat and avoid leaking which emails are registered. Note this is now defence-in-depth only:
+  `POST /auth/register` answers `409 EMAIL_TAKEN` on a duplicate, which reveals the same thing
+  deliberately. Don't "fix" either side to match the other — the trade-off is recorded in README.
+
+### Registration
+
+`register` and `login` must stay shaped alike; every past bug here came from one drifting:
+
+- `AuthService.register` returns `Promise<IssuedAuth>` — a total type, like `login`. It creates
+  the user and then **flows into the same session-issuing path**, so there is exactly one place
+  that mints a session and one that sets the cookie. Never let it resolve `undefined`; a handler
+  that falls through answers `200` with an empty body, which a client reads as success.
+- It revokes the session behind the presented refresh cookie, exactly as `login` does and for
+  the same reason (the single browser-wide cookie slot is about to be overwritten). Both take
+  the raw cookie via `readRefreshCookie` in the controller.
+- **Duplicates are caught, not pre-checked.** `UsersService.create` relies on the unique index on
+  `users.email`; `register` catches the Postgres `23505` violation and throws `EMAIL_TAKEN`. A
+  `findByEmail`-then-insert races under concurrent submits — don't reintroduce one.
+- Email normalization lives in the shared `@NormalizeEmail()` decorator
+  ([auth/dto/normalize-email.ts](backend/src/auth/dto/normalize-email.ts)) and is applied to
+  **both** `LoginDto` and `RegisterDto`. Applying it to one only is a silent permanent lockout,
+  since `findByEmail` is an exact match. It also guards non-strings on purpose: transforms run
+  before validators, so an unguarded `.trim()` turns a malformed body into a 500 instead of a 400.
+- Register is `201`; login is deliberately `200`.
 
 Dev seed user (from migration `AddUserNameAndSeedTestUser`, upgraded to Argon2 by a later one):
 `rashiqrahaman@yahoo.com` / `Password123!`.
@@ -179,12 +202,20 @@ logout-all, `GET /auth/me`, `GET /sessions` and `DELETE /sessions/:id` all exist
 frontend described below is wired to them. `backend/test/auth.e2e-spec.ts` and
 `session-cap.e2e-spec.ts` cover the cycle end to end against a live Postgres.
 
-Known gaps, both deliberate and both noted in the README: there is **no registration endpoint**
-(users come from the seed migration), and **nothing rate-limits login or refresh** —
-`RATE_LIMITED` exists in `ApiErrorCode` with no producer, and `@nestjs/throttler` is not a
-dependency. The e2e suite also runs against the development database rather than a scratch one;
-it cleans up the seed user's sessions after itself, but a dedicated test database is still the
-right fix.
+`POST /auth/register` exists on the **backend only** (see *Registration* above). It went through
+review and its findings are fixed, but **it has no tests yet** — no unit spec, no e2e case — and
+**no frontend consumes it**: there is no `RegisterPage`, no `register` mutation in `authApi`, and
+no route to it. Both are the obvious next pieces of work. The e2e cases worth writing first:
+register → 201 + cookie + the returned token works on `GET /tasks`; duplicate → 409
+`EMAIL_TAKEN`; case-variant duplicate → 409; register from a logged-in agent → the old session's
+token 401s. Note those tests create *users*, so their cleanup must delete them, not just sessions.
+
+Known gaps, deliberate and noted in the README: **nothing rate-limits register, login or
+refresh** — `RATE_LIMITED` exists in `ApiErrorCode` with no producer, and `@nestjs/throttler` is
+not a dependency; register is additionally an email-enumeration oracle by design, which makes
+throttling it the higher-value half. The e2e suite also runs against the development database
+rather than a scratch one; it cleans up the seed user's sessions after itself, but a dedicated
+test database is still the right fix.
 
 ## Conventions
 

@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   AuthUser,
   LoginInput,
+  RegisterInput,
 } from '@postman-clone/contracts'
 import { baseApi } from '../../app/baseApi'
 import { credentialsReceived, loggedOut, userLoaded } from './authSlice'
@@ -18,6 +19,23 @@ export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     login: builder.mutation<AuthResponse, LoginInput>({
       query: (body) => ({ url: 'auth/login', method: 'POST', body }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          dispatch(
+            credentialsReceived({
+              accessToken: data.accessToken,
+              user: data.user,
+            }),
+          )
+        } catch {
+          // Surfaced through the mutation's own `error`.
+        }
+      },
+    }),
+
+    register: builder.mutation<AuthResponse, RegisterInput>({
+      query: (body) => ({ url: 'auth/register', method: 'POST', body }),
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled
@@ -102,4 +120,5 @@ export const {
   useLogoutMutation,
   useLogoutAllMutation,
   useMeQuery,
+  useRegisterMutation
 } = authApi

@@ -4,6 +4,7 @@ import { RequireAuth } from '../features/auth/RequireAuth'
 import { SessionsPage } from '../features/sessions/SessionsPage'
 import { TasksPage } from '../features/tasks/TasksPage'
 import { AppShell } from './AppShell'
+import RegisterPage from '../features/auth/RegisterPage'
 
 /**
  * Router only — no `loader`, `action` or `fetcher`. Loaders would need the
@@ -15,6 +16,7 @@ import { AppShell } from './AppShell'
  */
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
   {
     element: <RequireAuth />,
     children: [
