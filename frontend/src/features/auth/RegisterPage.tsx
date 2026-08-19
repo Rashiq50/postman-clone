@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { useLoginMutation, useRegisterMutation } from "./authApi";
+import { useRegisterMutation } from "./authApi";
 import { selectIsAuthenticated } from "./authSlice";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { errorMessage, fieldErrors, toApiError } from "../../lib/api-error";
@@ -31,7 +31,6 @@ const RegisterPage = () => {
     event.preventDefault();
 
     if (password !== confirmPassword) {
-        
     }
 
     // Drop user A's cached data before user B signs in. This belongs here and
