@@ -1,5 +1,8 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { JwtModule, JwtService } from '@nestjs/jwt';
+import { ApiErrorCode } from '@postman-clone/contracts';
+import { QueryFailedError } from 'typeorm';
+import { ApiException } from '../common/errors/api.exception';
 import { Test, TestingModule } from '@nestjs/testing';
 import { hashPassword } from '../common/crypto/password';
 import { SessionsService } from '../sessions/sessions.service';
@@ -17,7 +20,11 @@ const PASSWORD = 'Password123!';
 describe('AuthService', () => {
   let service: AuthService;
   let jwtService: JwtService;
-  let usersService: { findByEmail: jest.Mock; findById: jest.Mock };
+  let usersService: {
+    create: jest.Mock;
+    findByEmail: jest.Mock;
+    findById: jest.Mock;
+  };
   let sessionsService: {
     create: jest.Mock;
     rotate: jest.Mock;
@@ -37,6 +44,7 @@ describe('AuthService', () => {
     refreshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     usersService = {
+      create: jest.fn().mockResolvedValue(user),
       findByEmail: jest.fn().mockResolvedValue(user),
       findById: jest.fn().mockResolvedValue(user),
     };
@@ -142,6 +150,143 @@ describe('AuthService', () => {
           secret: TEST_SECRET,
         });
       }).toThrow();
+    });
+  });
+
+  /**
+   * `register` must stay shaped like `login`: same total `IssuedAuth` return,
+   * same session-issuing tail, same same-browser revocation. Every past bug in
+   * this pair came from one of them drifting, so these mirror the login tests
+   * deliberately rather than testing registration in isolation.
+   */
+  describe('register', () => {
+    const uniqueViolation = () =>
+      Object.assign(
+        new QueryFailedError('INSERT', [], new Error('duplicate key')),
+        { driverError: { code: '23505' } },
+      );
+
+    it('creates the user and issues a session in one go', async () => {
+      const result = await service.register(
+        'new@example.com',
+        'New User',
+        PASSWORD,
+      );
+
+      expect(usersService.create).toHaveBeenCalledWith(
+        'new@example.com',
+        expect.stringContaining('$argon2id$'),
+        'New User',
+      );
+      expect(sessionsService.create).toHaveBeenCalledWith(user.id, undefined);
+      expect(result.accessToken).toEqual(expect.any(String));
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(result.refreshExpiresAt).toBe(refreshExpiresAt);
+      expect(result.user).toBe(user);
+    });
+
+    // A handler that resolves `undefined` answers 200 with an empty body,
+    // which a client reads as success. The return type must stay total.
+    it('never resolves without an access token', async () => {
+      const result = await service.register('new@example.com', 'N', PASSWORD);
+
+      expect(result).toBeDefined();
+      expect(result.expiresIn).toBeGreaterThan(0);
+    });
+
+    it('stores an Argon2id hash, never the password itself', async () => {
+      await service.register('new@example.com', 'New User', PASSWORD);
+
+      const [, passwordHash] = usersService.create.mock.calls[0] as string[];
+      expect(passwordHash).toMatch(/^\$argon2id\$/);
+      expect(passwordHash).not.toContain(PASSWORD);
+    });
+
+    it('issues a token bound to the new user and session', async () => {
+      const { accessToken } = await service.register(
+        'new@example.com',
+        'New User',
+        PASSWORD,
+      );
+
+      const payload = jwtService.verify<JwtPayload>(accessToken, {
+        secret: TEST_SECRET,
+        issuer: ISSUER,
+        audience: AUDIENCE,
+      });
+      expect(payload.sub).toBe(user.id);
+      expect(payload.sid).toBe('session-1');
+    });
+
+    it('passes the request context through to the new session', async () => {
+      const context = { userAgent: 'jest', ipAddress: '127.0.0.1' };
+
+      await service.register('new@example.com', 'N', PASSWORD, context);
+
+      expect(sessionsService.create).toHaveBeenCalledWith(user.id, context);
+    });
+
+    it('turns the unique-index violation into EMAIL_TAKEN', async () => {
+      usersService.create.mockRejectedValue(uniqueViolation());
+
+      await expect(
+        service.register('taken@example.com', 'N', PASSWORD),
+      ).rejects.toMatchObject({
+        status: HttpStatus.CONFLICT,
+        response: { code: ApiErrorCode.EMAIL_TAKEN },
+      });
+      expect(sessionsService.create).not.toHaveBeenCalled();
+    });
+
+    // The duplicate check is the index, not a findByEmail — a pre-check races
+    // under concurrent submits.
+    it('does not pre-check the address with findByEmail', async () => {
+      await service.register('new@example.com', 'N', PASSWORD);
+
+      expect(usersService.findByEmail).not.toHaveBeenCalled();
+    });
+
+    it('lets an unexpected database error through as itself', async () => {
+      const boom = new Error('connection lost');
+      usersService.create.mockRejectedValue(boom);
+
+      await expect(
+        service.register('new@example.com', 'N', PASSWORD),
+      ).rejects.toBe(boom);
+      expect(sessionsService.create).not.toHaveBeenCalled();
+    });
+
+    describe('same-browser session revocation', () => {
+      it('revokes the session behind the cookie the browser presented', async () => {
+        await service.register(
+          'new@example.com',
+          'N',
+          PASSWORD,
+          undefined,
+          'old-cookie',
+        );
+
+        expect(sessionsService.revokeByRefreshToken).toHaveBeenCalledWith(
+          'old-cookie',
+        );
+      });
+
+      // A registration that fails must not be able to kill a live session.
+      it('does not revoke anything when the address is already taken', async () => {
+        usersService.create.mockRejectedValue(uniqueViolation());
+
+        await expect(
+          service.register(
+            'taken@example.com',
+            'N',
+            PASSWORD,
+            undefined,
+            'old-cookie',
+          ),
+        ).rejects.toBeInstanceOf(ApiException);
+
+        expect(sessionsService.revokeByRefreshToken).not.toHaveBeenCalled();
+      });
     });
   });
 

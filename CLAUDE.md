@@ -100,6 +100,15 @@ The e2e test asserts this — it fails if the global guard is removed.
   since `findByEmail` is an exact match. It also guards non-strings on purpose: transforms run
   before validators, so an unguarded `.trim()` turns a malformed body into a 500 instead of a 400.
 - Register is `201`; login is deliberately `200`.
+- **The input policy is a shared contract, not a duplicated regex.**
+  `passwordProblem()`, `EMAIL_MAX_LENGTH` and `NAME_MAX_LENGTH` live in
+  [packages/contracts/src/password.ts](packages/contracts/src/password.ts); `RegisterDto` enforces
+  them and `RegisterPage` pre-checks with the same function. Changing the rule means editing that
+  file and running `./dev.sh contracts`. Never restate it on one side only.
+- The password is validated by a single `@Validate` constraint, so one attempt produces one
+  message — the form shows "must contain a number" rather than a pile of overlapping complaints.
+  `name` is trimmed *before* `@IsNotEmpty()`; the password is never trimmed (spaces are legitimate
+  characters and login compares verbatim).
 
 Dev seed user (from migration `AddUserNameAndSeedTestUser`, upgraded to Argon2 by a later one):
 `rashiqrahaman@yahoo.com` / `Password123!`.
@@ -191,6 +200,11 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
   does their refresh fail and drop them on `/login`. Convergence is by expiry, not by broadcast. The
   likely future misreading is "logout in one tab logs out all tabs"; it does not, and `BroadcastChannel`
   is a deliberate non-goal (a second source of truth for auth outside Redux).
+- `RegisterPage` mirrors `LoginPage`: same `baseApi.util.resetApiState()` in the submit handler
+  (registering while a session is live is a real path — the API revokes the old one), same
+  `from` handling, and no client-side rule the server does not also enforce. Its validation is a
+  courtesy; `passwordProblem` is imported from contracts precisely so it cannot drift from the
+  DTO. `register` is in `NEVER_REAUTH` — a failure there is the answer, not a stale token.
 - Before dispatching `loggedOut()`, `baseQueryWithReauth` checks the access token is still the one the
   request failed under. A refresh that resolves after a login completed is stale and must not wipe the
   new session. Don't "simplify" that check away.
@@ -202,13 +216,18 @@ logout-all, `GET /auth/me`, `GET /sessions` and `DELETE /sessions/:id` all exist
 frontend described below is wired to them. `backend/test/auth.e2e-spec.ts` and
 `session-cap.e2e-spec.ts` cover the cycle end to end against a live Postgres.
 
-`POST /auth/register` exists on the **backend only** (see *Registration* above). It went through
-review and its findings are fixed, but **it has no tests yet** — no unit spec, no e2e case — and
-**no frontend consumes it**: there is no `RegisterPage`, no `register` mutation in `authApi`, and
-no route to it. Both are the obvious next pieces of work. The e2e cases worth writing first:
-register → 201 + cookie + the returned token works on `GET /tasks`; duplicate → 409
-`EMAIL_TAKEN`; case-variant duplicate → 409; register from a logged-in agent → the old session's
-token 401s. Note those tests create *users*, so their cleanup must delete them, not just sessions.
+Registration is complete on both sides too. `POST /auth/register` is covered by a `register`
+block in `auth.service.spec.ts` and by `backend/test/register.e2e-spec.ts` (happy path + cookie +
+protected route, duplicate and case-variant duplicate → 409 `EMAIL_TAKEN`, the validation matrix,
+same-browser revocation, and the origin check). The frontend consumes it through `RegisterPage`,
+the `register` mutation in `authApi` and the `/register` route.
+
+Two things about `register.e2e-spec.ts` are load-bearing. It creates **users**, so its cleanup
+deletes them — by the `e2e-register-` email prefix, which also sweeps up after a run that was
+killed before its `afterAll`; sessions, refresh tokens and tasks follow via `ON DELETE CASCADE`.
+And it reads the cookie name from `ConfigService` rather than hard-coding `pc_refresh_token` the
+way `auth.e2e-spec.ts` does — a local `.env` that renamed `AUTH_COOKIE_NAME` makes that older
+suite report a missing cookie when the cookie is right there.
 
 Known gaps, deliberate and noted in the README: **nothing rate-limits register, login or
 refresh** — `RATE_LIMITED` exists in `ApiErrorCode` with no producer, and `@nestjs/throttler` is

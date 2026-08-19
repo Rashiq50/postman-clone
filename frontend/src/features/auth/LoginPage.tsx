@@ -112,9 +112,16 @@ export function LoginPage() {
               {isLoading ? "Signing in…" : "Sign in"}
             </button>
 
-            <div>
-              <Link to={"/register"}>Don't Have account ? register</Link>
-            </div>
+            <p className="text-sm text-slate-500">
+              Don't have an account?{" "}
+              <Link
+                to="/register"
+                state={{ from }}
+                className="font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                Sign up
+              </Link>
+            </p>
           </div>
 
           {error && (

@@ -198,6 +198,24 @@ which addresses are registered, so `AuthService.login`'s dummy-hash timing defen
 defence-in-depth rather than a real secrecy boundary. Rate limiting, not silence, is the
 mitigation for bulk enumeration — see the known gap below.
 
+**The input policy is shared, not restated.** `EMAIL_MAX_LENGTH`, `NAME_MAX_LENGTH` and
+`passwordProblem()` live in `packages/contracts/src/password.ts`, and both `RegisterDto` and the
+frontend's `RegisterPage` call the same function. A password rule copied into the browser is the
+classic way the two drift: the form starts accepting what the API rejects — a 400 the user cannot
+act on — or refusing addresses the API would have taken. The browser's copy is a courtesy that
+saves a round trip; the DTO is the enforcement, and it runs on every request regardless.
+
+The password rule itself is deliberately modest — at least 8 characters, containing a letter and
+a number, at most 256 — and it is one `@Validate` constraint rather than a stack of `@MinLength`
++ `@Matches`, so a rejection carries exactly one message the form can put under the field. The
+256-character ceiling is a denial-of-service bound, not a strength rule: registration always
+hashes with Argon2 on a public route, and hashing cost grows with input length.
+
+`name` is trimmed before `@IsNotEmpty()` runs — transforms run first — so a name of pure
+whitespace is a 400 rather than a blank display name everywhere the user's name appears.
+Passwords are deliberately *not* trimmed: spaces are legitimate password characters, and
+stripping them at registration would lock the user out at login, which compares verbatim.
+
 Email is normalized (trimmed and lowercased) by a shared `@NormalizeEmail()` decorator applied to
 **both** `RegisterDto` and `LoginDto`. Applying it to only one is a silent lockout: `findByEmail`
 is an exact match, so an account registered as `Foo@Bar.com` could never be reached by a login
