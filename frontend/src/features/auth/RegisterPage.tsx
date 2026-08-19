@@ -30,14 +30,9 @@ const RegisterPage = () => {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    if (password !== confirmPassword) {
+    if (password.value !== confirmPassword.value) {
     }
 
-    // Drop user A's cached data before user B signs in. This belongs here and
-    // not in logout's onQueryStarted: at logout time the task list still has a
-    // live subscriber, so a reset there refetches immediately, 401s, and then
-    // refreshes against a cookie the server has just cleared. On /login
-    // nothing authenticated is mounted, which is exactly when this matters.
     dispatch(baseApi.util.resetApiState());
 
     try {
@@ -78,7 +73,7 @@ const RegisterPage = () => {
               <input
                 id="name"
                 type="text"
-                autoComplete="none"
+                autoComplete="off"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 aria-invalid={Boolean(fields.name)}
@@ -89,7 +84,7 @@ const RegisterPage = () => {
                 }`}
               />
               {fields.name && (
-                <p className="mt-1 text-xs text-red-600">{fields.email}</p>
+                <p className="mt-1 text-xs text-red-600">{fields.name}</p>
               )}
             </div>
 
@@ -125,26 +120,45 @@ const RegisterPage = () => {
               >
                 Password
               </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password.value}
-                onChange={(e) =>
-                  setPassword((prev) => {
-                    return {
-                      ...prev,
-                      value: e.target.value,
-                    };
-                  })
-                }
-                aria-invalid={Boolean(fields.password)}
-                className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 ${
-                  fields.password
-                    ? "border-red-400 focus:border-red-500 focus:ring-red-200"
-                    : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-200"
-                }`}
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={password.show ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={password.value}
+                  onChange={(e) =>
+                    setPassword((prev) => {
+                      return {
+                        ...prev,
+                        value: e.target.value,
+                      };
+                    })
+                  }
+                  aria-invalid={Boolean(fields.password)}
+                  className={`w-full rounded-md border py-2 pl-3 pr-16 text-sm outline-none focus:ring-2 ${
+                    fields.password
+                      ? "border-red-400 focus:border-red-500 focus:ring-red-200"
+                      : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-200"
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPassword((prev) => {
+                      return {
+                        ...prev,
+                        show: !prev.show,
+                      };
+                    })
+                  }
+                  aria-controls="password"
+                  aria-pressed={password.show}
+                  aria-label={password.show ? "Hide password" : "Show password"}
+                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-slate-500 transition hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-200"
+                >
+                  {password.show ? "Hide" : "Show"}
+                </button>
+              </div>
               {fields.password && (
                 <p className="mt-1 text-xs text-red-600">{fields.password}</p>
               )}
@@ -157,26 +171,45 @@ const RegisterPage = () => {
               >
                 Confirm Password
               </label>
-              <input
-                id="confirm-password"
-                type="password"
-                autoComplete="none"
-                value={confirmPassword.value}
-                onChange={(e) =>
-                  setConfirmPassword((prev) => {
-                    return {
-                      ...prev,
-                      value: e.target.value,
-                    };
-                  })
-                }
-                aria-invalid={Boolean(fields.password)}
-                className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 ${
-                  fields.password
-                    ? "border-red-400 focus:border-red-500 focus:ring-red-200"
-                    : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-200"
-                }`}
-              />
+              <div className="relative">
+                <input
+                  id="confirm-password"
+                  type={confirmPassword.show ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={confirmPassword.value}
+                  onChange={(e) =>
+                    setConfirmPassword((prev) => {
+                      return {
+                        ...prev,
+                        value: e.target.value,
+                      };
+                    })
+                  }
+                  aria-invalid={Boolean(fields.password)}
+                  className={`w-full rounded-md border py-2 pl-3 pr-16 text-sm outline-none focus:ring-2 ${
+                    fields.password
+                      ? "border-red-400 focus:border-red-500 focus:ring-red-200"
+                      : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-200"
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setConfirmPassword((prev) => {
+                      return {
+                        ...prev,
+                        show: !prev.show,
+                      };
+                    })
+                  }
+                  aria-controls="confirm-password"
+                  aria-pressed={confirmPassword.show}
+                  aria-label={confirmPassword.show ? "Hide password confirmation" : "Show password confirmation"}
+                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-slate-500 transition hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-200"
+                >
+                  {confirmPassword.show ? "Hide" : "Show"}
+                </button>
+              </div>
               {fields.password && (
                 <p className="mt-1 text-xs text-red-600">{fields.password}</p>
               )}
@@ -184,7 +217,7 @@ const RegisterPage = () => {
 
             <button
               type="submit"
-              disabled={isLoading || !email.trim() || !password}
+              disabled={isLoading || !email.trim() || !password?.value || !confirmPassword?.value || !name}
               className="h-[38px] rounded-md bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isLoading ? "Signing up…" : "Sign up"}
