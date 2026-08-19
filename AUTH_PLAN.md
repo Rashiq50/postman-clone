@@ -121,6 +121,10 @@ COOKIE_SECURE: Joi.boolean().when('NODE_ENV', {
 COOKIE_SAME_SITE: Joi.string().valid('lax', 'strict', 'none').default('lax'),
 COOKIE_DOMAIN: Joi.string().hostname().allow('').default(''),
 REFRESH_ROTATION_GRACE_MS: Joi.number().integer().min(0).default(10000),
+// Concurrent live sessions per user. A developer legitimately has desktop app +
+// browser + dev browser + private window + a second machine, so this is set well
+// above "a few" — it exists to bound abuse, not to police normal use. See §2.8a.
+MAX_SESSIONS_PER_USER: Joi.number().integer().min(1).default(10),
 ```
 
 Add an object-level `.custom(...)` cross-check: `COOKIE_SAME_SITE=none` without `COOKIE_SECURE`
@@ -240,6 +244,60 @@ deleteExpiredSessions(): Promise<number>
 
 `rotate(rawToken)` drops the stub's `(sessionId, oldToken)` shape — the session is derivable from
 the token, and a caller-supplied id is a mismatch bug waiting to happen.
+
+### 2.8a Session cap — `MAX_SESSIONS_PER_USER`
+
+Enforced inside `create()`'s existing transaction, **after** the insert, as `private
+enforceSessionCap(manager, userId): Promise<number>`. Create-then-trim, not trim-then-create: the
+count is then exact, and the session just issued is by definition the most recent, so it can never
+be the one revoked.
+
+**Revoke, never delete** — the row stays queryable for audit, and physical removal is already the
+job of `deleteExpiredSessions()` when `expiresAt` passes. Two-stage lifecycle: revoked now,
+collected in 30 days.
+
+One set-based statement, which is what makes this safe:
+
+```sql
+UPDATE "sessions" SET "revokedAt" = now()
+WHERE "id" IN (
+  SELECT "id" FROM "sessions"
+  WHERE "userId" = $1 AND "revokedAt" IS NULL AND "expiresAt" > now()
+  ORDER BY COALESCE("lastUsedAt", "createdAt") DESC
+  OFFSET $2   -- MAX_SESSIONS_PER_USER
+)
+```
+
+Three things that statement buys, each of which a read-then-write loop would get wrong:
+
+- **No race.** Two simultaneous logins would both read `count === MAX`, both revoke one, both
+  insert, and land at `MAX + 1`. As a single statement inside the transaction there is no
+  read-then-write window; concurrent logins converge.
+- **Self-healing.** It revokes *everything* past the cap, not just one row, so lowering
+  `MAX_SESSIONS_PER_USER` in `.env` trims users down on their next login instead of leaving them
+  permanently over the limit.
+- **`COALESCE(lastUsedAt, createdAt)` is load-bearing.** `lastUsedAt` is `null` until a session's
+  first rotation (§2.8), and Postgres sorts `NULL` first under `DESC` — so ordering on the bare
+  column would rank every never-refreshed session as the *most* recently active and preferentially
+  evict the ones actually in use. `COALESCE` is the honest "last activity" key.
+
+Revoking the session row alone is sufficient; the children need no update, because both
+`isActive()` and `rotate()` step 5 already gate on the parent session. That keeps this to one
+statement.
+
+**On "oldest inactive" — I read `inactive` as relative, not absolute.** An idle-threshold policy
+("revoke sessions unused for > N days") is not a cap: a user with `MAX` genuinely-active sessions
+has nothing to trim, and the login either has to exceed the cap or fail. So the policy is strictly
+*oldest by last activity*, and it always makes room. Say so where the constant is defined, because
+"inactive" invites the other reading.
+
+**Consequence to accept:** the evicted device stops working silently — its next request 401s, its
+refresh finds a revoked session, and it lands on `/login` with the same generic message as every
+other refresh failure (§2.8, deliberate). That is already the documented convergence path in §3.8.
+At a cap of 10 a real user will effectively never see it; credential stuffing will.
+
+This also bounds — but does not replace — the orphaned-session problem in §3.8. The cap is the
+backstop; revoking the presented cookie's session on login is the precise fix. Take both.
 
 **Expiry is absolute, never sliding.** `sessions.expiresAt` is set at login and never extended;
 each child token inherits it. Sliding expiry means a stolen token grants indefinite access, which
@@ -514,10 +572,17 @@ export const baseQueryWithReauth: BaseQueryFn<...> = async (args, api, extraOpti
   const result = await rawBaseQuery(args, api, extraOptions)
   if (!isUnauthenticated(result.error) || NEVER_REAUTH.has(api.endpoint)) return result
 
+  // Snapshot the token this request failed under. If it changed while the
+  // refresh was in flight, a login landed behind us and our failure is stale —
+  // dropping the loggedOut() on the floor is the entire point. See §3.8.
+  const staleToken = (api.getState() as RootState).auth.accessToken
+
   const accessToken = await refreshOnce(api, extraOptions)
   if (!accessToken) {
-    // The only place the app decides a session is over.
-    api.dispatch(loggedOut())
+    if ((api.getState() as RootState).auth.accessToken === staleToken) {
+      // The only place the app decides a session is over.
+      api.dispatch(loggedOut())
+    }
     return result
   }
   // prepareHeaders reads getState() again, so the retry carries the new token.
@@ -625,6 +690,48 @@ class-validator emits `email`/`password` field paths, so `fieldErrors` maps stra
 - **`.oxlintrc.json`** — no change; `react/only-export-components` won't fire, since no file exports
   both a component and a hook/selector.
 
+## 3.8 Multi-tab semantics — **per-tab client state, one shared server session**
+
+This is a deliberate design property, not an oversight, and it is the thing a future reader is most
+likely to get wrong. Document it as a docblock at the top of `authSlice.ts` **and** in CLAUDE.md's
+auth section.
+
+> **Auth state is per-tab. Only the refresh cookie is shared.**
+> The access token lives in each tab's Redux store, which is per-JS-context. The refresh cookie is
+> one browser-wide slot (fixed name, host-only, `Path=/api/v1/auth`). So: `loggedOut()` in one tab
+> does **not** log out other tabs — they keep working off their in-memory access token until it
+> expires (≤ `JWT_ACCESS_EXPIRES_IN`) or they hit a 401, at which point their refresh fails against
+> the cleared/revoked cookie and *then* they fall back to `/login`. Convergence is by expiry, not by
+> broadcast. Do not assume synchronous cross-tab logout.
+
+**Why not fix it with `BroadcastChannel`:** out of scope, and it would be a second source of truth
+for auth state living outside Redux. Revisit only if a product requirement demands instant cross-tab
+logout. Note in the docblock that this is the intended extension point.
+
+### The two races this creates, and what the plan does about each
+
+**1. Stale `loggedOut()` clobbering a fresh login (same tab).** Request A 401s → refresh starts →
+the refresh hangs → meanwhile a login completes and dispatches `credentialsReceived` → the stale
+refresh finally fails → `loggedOut()` wipes a session that is perfectly valid. **Fixed** by the
+token snapshot in §3.3: only dispatch `loggedOut()` if the token in state is still the one the
+request failed under. Two lines, no dependency. This also covers the cross-tab flavour you get when
+the second tab's login rotates the shared cookie out from under an in-flight refresh in the first.
+
+**2. Orphaned sessions from a second explicit login (not fixed by the above).** Sharper than the
+`loggedOut()` race and worth stating plainly: because the cookie is a **single shared slot**, a
+second login in the same browser overwrites it. The first session is never revoked — its refresh
+token is simply now unreachable, so it sits `revokedAt IS NULL, expiresAt > now()` for the full
+30 days and shows up as a **ghost device in `GET /sessions`** that the user cannot recognise and
+whose "Revoke" does nothing observable. Every re-login in the same browser leaves one behind.
+
+**Optional cheap mitigation (recommend taking it — ~6 lines in `AuthService.login`):** read the
+refresh cookie on the login request; if it resolves to a live session, revoke that session before
+issuing the new one. Precise, because the only way to present that cookie is to *be* the browser
+whose token is about to be overwritten. It does not touch other devices — they have their own
+cookies. Add an e2e case: log in twice with the same agent → `GET /sessions` has `meta.total === 1`.
+
+Without this, add a `MAX_SESSIONS_PER_USER` cap or accept the ghosts and say so on the devices page.
+
 ---
 
 # Build order
@@ -689,6 +796,13 @@ cookie jar):
 5. Logout-all: two agents, same user → logout-all from A → B's `/tasks` **and** B's refresh both 401.
 6. Sessions: two logins → `meta.total === 2`, exactly one `current: true` → DELETE the other → 204,
    total 1. Random UUID → 404. Non-UUID → 400 from `ParseUUIDPipe`.
+7. **Session cap (§2.8a):** run with `MAX_SESSIONS_PER_USER=3`, log in four times → `GET /sessions`
+   `meta.total === 3`, the first login's access token now 401s with `Session is no longer active`,
+   and its row still exists in the DB with `revokedAt` set (**revoked, not deleted** — query it
+   directly; the list endpoint filters it out, so the assertion has to go past the API). Then a
+   fifth login → still 3. Unit-test the ordering separately: give one session a recent `lastUsedAt`
+   and an older `createdAt`, and assert it outlives a session created later but never used — that
+   is the `COALESCE` behaviour, and a bare `ORDER BY lastUsedAt` passes every other case.
 
 ⚠️ These are the **first mutating e2e tests** (`app.e2e-spec.ts` is read-only). Add an `afterAll`
 cleaning the seed user's sessions, or point `test:e2e` at a scratch database. The README already
@@ -722,6 +836,14 @@ lists "e2e test database" as a known gap; this makes it start to matter.
     invalidation); revoke *this device* → confirm → back to `/login`. "Sign out everywhere" → both
     browsers hit `/login` on their next request.
 
+11. **Multi-tab (§3.8)** — with `JWT_ACCESS_EXPIRES_IN=10s`: open `/tasks` in two tabs of the *same*
+    browser, sign out in tab A. Tab B must keep working until its access token expires, then land on
+    `/login`. That lag is correct — confirm it matches the documented behaviour rather than looking
+    like a bug. Then, in one tab, throttle the network, force a 401 so a refresh hangs, and sign in
+    from the other tab: the fresh login must **survive** (the §3.3 token snapshot). Finally, if the
+    login-revokes-the-cookie's-session mitigation is taken, log in twice in one browser and confirm
+    `GET /sessions` shows one row, not two.
+
 Restore `JWT_ACCESS_EXPIRES_IN` to `15m` afterwards.
 
 ---
@@ -739,8 +861,11 @@ Restore `JWT_ACCESS_EXPIRES_IN` to `15m` afterwards.
    balancer. Comment it; treat as a separate deployment change.
 5. **Forgetting `./dev.sh contracts`** — contracts are copied, not linked, so both sides keep
    compiling against a stale `dist/` and the `implements` clause silently stops guarding anything.
-6. **Session growth.** Every login creates a session with no cap; credential stuffing against a valid
-   password creates unbounded rows. `MAX_SESSIONS_PER_USER` and rate limiting are reasonable
-   follow-ups, out of scope here.
+6. **Session growth — now handled in scope** by `MAX_SESSIONS_PER_USER` (§2.8a). Rate limiting
+   remains out of scope: the cap bounds stored rows, but nothing yet bounds *attempts*, so login and
+   refresh are still brute-forceable and `RATE_LIMITED` still has no producer. README follow-up.
 7. **Moving `baseApi`** contradicts the literal text of CLAUDE.md and README — the doc edit must land
    in the same change.
+8. **Cross-tab logout is not synchronous, by design (§3.8).** Other tabs converge by access-token
+   expiry, not by broadcast. The likely future misreading is "logout in one tab logs out all tabs" —
+   it does not. Documented in `authSlice.ts` and CLAUDE.md rather than fixed with `BroadcastChannel`.
