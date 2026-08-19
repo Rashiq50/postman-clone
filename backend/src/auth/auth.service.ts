@@ -1,11 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
+import { verifyPassword } from '../common/crypto/password';
+import type { SessionContext } from '../sessions/sessions.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { UserEntity } from '../users/entities/user.entity';
-import { Repository } from 'typeorm';
-import { InjectRepository } from '@nestjs/typeorm';
-import { verifyPassword } from '../common/crypto/password';
+import { UsersService } from '../users/users.service';
 import type { JwtPayload } from './jwt-payload';
 
 /**
@@ -13,27 +13,46 @@ import type { JwtPayload } from './jwt-payload';
  * matches. Without it, a missing email returns in microseconds while a wrong
  * password takes the full hashing time, and that gap alone tells an attacker
  * which addresses are registered.
+ *
+ * This stays here rather than moving to `UsersService` with the lookups: it is
+ * an authentication concern, and hiding it behind a user-lookup method is how
+ * it quietly stops being applied.
  */
 const DUMMY_PASSWORD_HASH =
   '$argon2id$v=19$m=19456,p=1,t=2$E3baNFDoelmbTljdGFnWZQ$M7/xjGIsJZVBdHr2Pd17WFm8Zhwqujo4uY0EQXort6Q';
+
+/**
+ * What the controller needs to answer a login or refresh: the access token and
+ * its lifetime for the body, the raw refresh token and its expiry for the
+ * cookie, and the user to serialise.
+ *
+ * The raw refresh token is returned rather than written to a cookie here.
+ * Cookies are HTTP plumbing, and keeping them out of the service is what lets
+ * `auth.service.spec.ts` test the auth logic without faking a `Response`.
+ */
+export interface IssuedAuth {
+  accessToken: string;
+  expiresIn: number;
+  refreshToken: string;
+  refreshExpiresAt: Date;
+  user: UserEntity;
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly sessionsService: SessionsService,
-    @InjectRepository(UserEntity)
-    private readonly usersRepository: Repository<UserEntity>,
+    private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
   ) {}
 
   async login(
     email: string,
     password: string,
-  ): Promise<{
-    refreshToken: string;
-    accessToken: string;
-  }> {
-    const user = await this.usersRepository.findOne({ where: { email } });
+    context?: SessionContext,
+    presentedRefreshToken?: string,
+  ): Promise<IssuedAuth> {
+    const user = await this.usersService.findByEmail(email);
 
     const passwordMatches = await verifyPassword(
       user?.passwordHash ?? DUMMY_PASSWORD_HASH,
@@ -42,14 +61,101 @@ export class AuthService {
     if (!user || !passwordMatches) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    const { session, refreshToken } = await this.sessionsService.create(
-      user.id,
-    );
-    const accessToken = this.createToken(user.id, session.id);
+
+    // The refresh cookie is a single browser-wide slot, and this login is about
+    // to overwrite it. Without this the session behind the old cookie would
+    // never be revoked — its token merely becomes unreachable — so it would sit
+    // live for its full lifetime as a ghost device in `GET /sessions` that the
+    // user cannot recognise and whose "Revoke" does nothing observable.
+    //
+    // Precise: the only way to present that cookie is to *be* the browser being
+    // overwritten, so other devices are untouched. Safe: the call is idempotent
+    // and never throws, so a stale or foreign cookie cannot break a login.
+    //
+    // Only after the password check. An unauthenticated POST /auth/login must
+    // not be able to kill a session.
+    await this.sessionsService.revokeByRefreshToken(presentedRefreshToken);
+
+    const { session, refreshToken, expiresAt } =
+      await this.sessionsService.create(user.id, context);
+
+    return this.issue(user, session.id, refreshToken, expiresAt);
+  }
+
+  /**
+   * Rotates a refresh token and mints a fresh access token for the same
+   * session. The session id is stable across rotation, so access tokens already
+   * in flight keep working.
+   */
+  async refresh(rawRefreshToken: string | undefined): Promise<IssuedAuth> {
+    if (!rawRefreshToken) {
+      // Same message the rotation failures collapse to: a caller with no cookie
+      // and a caller with a dead one learn exactly as much.
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const { session, refreshToken, expiresAt } =
+      await this.sessionsService.rotate(rawRefreshToken);
+
+    const user = await this.usersService.findById(session.userId);
+    if (!user) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    return this.issue(user, session.id, refreshToken, expiresAt);
+  }
+
+  /**
+   * Resolves on an absent or unknown token and never throws. Logout is the one
+   * operation that must not be able to fail: a client calling it has already
+   * decided the session is over, and a 4xx here would leave the UI stuck signed
+   * in over something it cannot fix.
+   */
+  async logout(rawRefreshToken: string | undefined): Promise<void> {
+    await this.sessionsService.revokeByRefreshToken(rawRefreshToken);
+  }
+
+  async logoutAll(userId: string): Promise<void> {
+    await this.sessionsService.revokeAllForUser(userId);
+  }
+
+  /** `null` is a 401, not a 404: the token verified but its subject is gone. */
+  async me(userId: string): Promise<UserEntity> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('Invalid access token');
+    }
+    return user;
+  }
+
+  /** Shared tail of `login` and `refresh` — both answer with the same shape. */
+  private issue(
+    user: UserEntity,
+    sessionId: string,
+    refreshToken: string,
+    refreshExpiresAt: Date,
+  ): IssuedAuth {
+    const accessToken = this.createToken(user.id, sessionId);
+
     return {
-      refreshToken,
       accessToken,
+      expiresIn: this.expiresInSeconds(accessToken),
+      refreshToken,
+      refreshExpiresAt,
+      user,
     };
+  }
+
+  /**
+   * Seconds until the access token expires, read back off the token just
+   * signed rather than from `JWT_ACCESS_EXPIRES_IN`. Re-reading the config here
+   * would be a second copy of a signing parameter, which is exactly what
+   * keeping those options in the `JwtModule` factory is meant to prevent — and
+   * the two copies would drift the first time one of them changed.
+   */
+  private expiresInSeconds(accessToken: string): number {
+    const { exp, iat } = this.jwtService.decode<JwtPayload>(accessToken);
+    return exp - iat;
   }
 
   /**

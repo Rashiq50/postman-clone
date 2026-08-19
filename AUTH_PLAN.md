@@ -2,8 +2,9 @@
 
 ## Context
 
-Auth in this repo is half-built. Access-token generation and a global `JwtAuthGuard` work,
-but nothing else does:
+**This section describes the starting point, not the current state — all of it has since been
+built. See *Progress* below.** At the time this plan was written, auth was half-built:
+access-token generation and a global `JwtAuthGuard` worked, and nothing else did:
 
 - `POST /api/v1/auth/login` is the **only** auth route. There is no refresh, logout, or
   session-management endpoint. `SessionsController` is an empty shell and `SessionsService`
@@ -14,7 +15,6 @@ but nothing else does:
 - The **frontend has no auth at all**: no login screen, no router, and `baseApi` sends no
   `Authorization` header. Since the global guard protects `/tasks`, the task UI 401s against a
   running backend. The app is currently unusable end-to-end.
-  *(No longer true — Part 3 is built. This section describes the starting point; see **Progress** below.)*
 
 Outcome: a complete session system — login sets an httpOnly refresh cookie, refresh tokens
 rotate on every use with reuse detection, logout and per-device revocation work, and the React
@@ -40,91 +40,77 @@ replaced the session row, every access token would die the instant the client re
 
 ---
 
-## Progress — Part 1 and Part 3 done, Part 2 not started
+## Progress — all three parts done
 
-*Last updated 2026-08-19. The frontend is complete and is **ahead of the backend**: it is written
-against the finished API described below, so until Part 2 lands only `POST /auth/login` exists, its
-response has no `user`/`expiresIn`, and every other auth route 404s. Do not "fix" the client to
-match today's backend — finish the backend.*
+*Last updated 2026-08-19. Backend, frontend and contracts are complete and wired to each other.
+The sections below are kept as the record of what was decided and why; where the implementation
+departed from the letter of the plan, that is noted inline.*
 
-**Part 1 — Contracts: done.** `packages/contracts/src/auth.ts` created with all four interfaces
-exactly as specified, exported from `index.ts` after `./api`, and `dist/` re-synced into both apps.
-*(The re-sync had in fact been skipped when this was first written — risk #5 live in the wild. Caught
-in review and fixed 2026-08-19 by re-running `cd frontend && yarn install`, whose postinstall rebuilt
-and copied contracts into both apps; the same install also restored `react-router`, which was in
-`package.json`/`yarn.lock` but missing from `node_modules`.)*
+**Part 1 — Contracts: done.** `packages/contracts/src/auth.ts` with all four interfaces exactly
+as specified, exported from `index.ts` after `./api`, `dist/` synced into both apps.
 
-**Part 2 — Backend: not started**, with one exception taken out of order:
+**Part 2 — Backend: done.** Every item in §2.1–§2.12:
 
-- [x] `configure-app.ts` — `enableCors({ credentials: true })` (§2.12). Pulled forward because the
-      client's `credentials: 'include'` was being blocked in the browser: without the matching
-      `Access-Control-Allow-Credentials` header, Chrome discards the whole response. `app.use(cookieParser())`
-      is **still not wired** — the rest of §2.12 is untouched.
-- [x] `common/duration.ts` + `duration.spec.ts` (§2.1), and `SessionsService` now resolves
-      `refreshTtlMs` once in its constructor. This fixed a live bug: the old
-      `parseInt(value.replace('d','')) * 86400000` multiplied by *days* whatever unit was written,
-      so `12h` meant 12 days and a non-numeric value produced `NaN` → `Invalid Date` → a session
-      that could never be active. It was correct only because `.env` happened to say `7d`.
-- [x] `REFRESH_TOKEN_EXPIRES_IN` gained the `^\d+(ms|s|m|h|d)$` pattern in `env.validation.ts`
-      (§2.3), so a typo is named at boot rather than reaching `parseDuration`. The other four new
-      env keys are still missing.
-- [x] `auth.module.ts` now imports `SessionsModule` and no longer lists `SessionsService` in
-      `providers` (§2.12) — that duplicate provider was building a **second, independent**
-      `SessionsService` for `AuthService` to use. `TypeOrmModule.forFeature([UserEntity])` stays
-      until §2.7 moves `AuthService` onto `UsersService`.
-- [ ] Everything else in §2.1–§2.12 — most importantly the entire refresh-token mechanism:
-      `refresh_tokens` is not a table, and `sessions.refreshTokenHash` is written at login and
-      **read by nothing**, so a refresh token currently cannot be redeemed at all.
-
-**Part 3 — Frontend: done.** Every file in §3.1–§3.8, including the §3.3 stale-token snapshot and
-the §3.8 multi-tab docblock.
-
-| § | Item | State |
+| § | Item | Notes |
 |---|---|---|
-| 3.1 | `react-router@7.18.2`, router-only, no `react-router-dom` | done |
-| 3.2 | `features/auth/authSlice.ts` — 4 actions, 4 selectors, no `status`, no persistence, no token mirror | done |
-| 3.3 | `app/baseApi.ts` — moved, `credentials: 'include'`, `prepareHeaders`, `NEVER_REAUTH` on `api.endpoint`, `refreshInFlight` singleton, raw `runRefresh`, token snapshot before `loggedOut()` | done |
-| 3.4 | `features/auth/authApi.ts`, `features/sessions/sessionsApi.ts` — `onQueryStarted`, `resetApiState()` in `LoginPage` | done |
-| 3.5 | `features/auth/bootstrapAuth.ts`, dispatched at module scope in `main.tsx` | done |
-| 3.6 | `router.tsx`, `LoginPage`, `RequireAuth`, `AppShell`, `AppHeader`, `SessionsPage`, `SessionItem`, `TasksPage` | done |
-| 3.7 | `main.tsx`, `App.tsx`, `store.ts`, `tasksApi.ts` trimmed; `vite-env.d.ts` and `.oxlintrc.json` untouched | done |
-| 3.8 | Docblock at the top of `authSlice.ts` + the same in CLAUDE.md | done |
+| 2.1 | `common/duration.ts` + spec | Replaced the old parse that read `12h` as 12 days |
+| 2.2 | `@types/cookie-parser@^1.4.9` | Needed for `req.cookies` on `@types/express@5` |
+| 2.3 | Five env keys + the `SameSite=none` ⇒ `Secure` cross-check | Verified: boot is rejected |
+| 2.4 | `RefreshTokenEntity`; `SessionEntity` gains `userAgent`/`ipAddress`/`refreshTokens`, loses `refreshTokenHash` | |
+| 2.5 | `AddRefreshTokenRotation1786640000000` | `up` **and** `down` run clean against live Postgres |
+| 2.6 | `refresh-cookie.ts` as plain functions | Set/clear symmetry pinned by spec |
+| 2.7 | `UsersService.findById`/`findByEmail`, exported | `AuthService` no longer injects a repository |
+| 2.8 | Full `SessionsService`, incl. `rotateWithin` and the session cap | Commit-then-throw, lock without join, grace anchored at first use |
+| 2.9 | `AuthService` login/refresh/logout/logoutAll/me | `createToken` byte-identical; `expiresIn` decoded off the signed token |
+| 2.10 | `AuthUserResponseDto`, `AuthResponseDto`, `SessionResponseDto`, `LoginDto` max lengths | The `@Type()` footgun is pinned by its own spec |
+| 2.11 | Both controllers + `OriginCheckGuard` | Login is now 200 and carries no refresh token |
+| 2.12 | Module wiring + `cookieParser()` | |
 
-**Two deviations from the letter of Part 3, both deliberate:**
+**Part 3 — Frontend: done**, unchanged by Part 2 — it was written against this API and needed no
+edits once the backend caught up. `yarn lint` and `yarn build` both pass.
 
-1. §3.1 says to note the SPA fallback in `frontend/README.md`. It went in the **root** `README.md`
-   frontend section instead, because CLAUDE.md marks `frontend/README.md` as untouched framework
-   boilerplate.
-2. §3.6 says `SessionsPage` mirrors `TaskList.tsx`'s four states "verbatim". Same four states, but
-   as conditional blocks rather than early returns: the page header and the "Sign out everywhere"
-   button stay mounted across all of them, and `TaskList` has no header to keep.
+### Deviations from the letter of the plan
 
-**Docs.** `README.md` (new `baseApi` path, routing, an "Auth in the client" subsection) and
-`CLAUDE.md` (rewritten frontend bullet plus a "Frontend auth rules" block) are updated for Part 3.
-Still owed once Part 2 lands: the README's 7 new routes and the backend half of the CLAUDE.md
-rewrite listed under *Docs last*.
+1. §3.1's SPA-fallback note went in the **root** `README.md`, since CLAUDE.md marks
+   `frontend/README.md` as untouched boilerplate.
+2. §3.6's `SessionsPage` uses conditional blocks rather than `TaskList`'s early returns, so the
+   page header and "Sign out everywhere" stay mounted across all four states.
+3. §2.3's cross-check `throw`s inside Joi's `.custom()` rather than calling `helpers.error` —
+   same outcome, and the message survives verbatim.
+4. The session-cap e2e lives in its own file, `test/session-cap.e2e-spec.ts`. It has to set
+   `process.env.MAX_SESSIONS_PER_USER` before `AppModule` is first imported, because
+   `ConfigModule.forRoot()` validates the environment exactly once per process.
+5. §2.3's `REFRESH_ROTATION_GRACE_MS=0` trick was not needed for the reuse e2e; the test ages
+   `usedAt` in SQL instead, which keeps it independent of the ambient config.
+6. `@Transform(({ value }: { value: unknown }) => …)` in the response DTOs, including
+   `TaskResponseDto`, which had the same untyped parameter. This removes six
+   `no-unsafe-return` lint errors and keeps all three DTOs on one idiom.
 
-**Verification run so far:** `cd frontend && yarn lint && yarn build` — both pass (re-verified
-2026-08-19 after the contracts re-sync and `yarn install` above; before that, both failed on the
-missing `auth` contract types and missing `react-router`). No frontend test
-runner exists, so there are no frontend unit tests to add. Backend specs and `test:e2e` are
-untouched and will break exactly as the table below predicts once Part 2 starts. Manual steps 1–11
-are not runnable until then.
+### Environment reconciled
 
-**Environment state (re-verified against the tree 2026-08-19 — this section previously described
-both items wrongly):**
+`backend/.env` had `AUTH_COOKIE_NAME=__Host-refresh` — a **real** `__Host-` prefix, which the
+browser would have rejected outright against §2.6's `Path=/api/v1/auth`. Changed to
+`.env.example`'s `pc_refresh_token`, and both the example file and CLAUDE.md now say explicitly
+why a `__Host-` name must not be reintroduced. `REFRESH_TOKEN_EXPIRES_IN` was `7d` against the
+example's `30d`; both now say `30d`, matching the prose in §2.8a/§3.8. `frontend/.env` still
+does not exist, which is correct in dev.
 
-- `backend/.env` has `AUTH_COOKIE_NAME=_HOST-token` — a **malformed** cookie prefix (single
-  underscore, uppercase), not the `__Host-refresh` this section used to claim. Accidentally
-  harmless: browsers apply prefix semantics only to a literal `__Host-`/`__Secure-` start, so
-  this cookie will work fine with §2.6's `Path=/api/v1/auth`. Still, change it to
-  `.env.example`'s `pc_refresh_token` before Part 2, so nobody later "fixes" the name into a real
-  `__Host-` prefix — which §2.6's path deliberately rules out.
-- `frontend/.env` does not exist, so the `VITE_API_URL` landmine previously described here is
-  already cleared. Keep it that way in dev — the Vite proxy makes every request same-origin.
-- Drift to reconcile while touching `.env`: it sets `REFRESH_TOKEN_EXPIRES_IN=7d` where
-  `.env.example` says `30d`, and the prose in §2.8a/§3.8 assumes 30-day sessions. Either value
-  works; make the files agree.
+### Verification actually run
+
+- `cd backend && yarn test` — **134 passing**, 11 suites.
+- `cd backend && yarn test:e2e` — **30 passing**, 3 suites, against live Postgres.
+- `cd backend && yarn lint` — 7 errors remain, **all pre-existing** and none in auth or sessions
+  code (`jwt-auth.guard.spec`, `all-exceptions.filter`, `health.controller.spec`,
+  `tasks.service.spec`, `app.e2e-spec`).
+- `cd frontend && yarn lint && yarn build` — both clean.
+- `yarn migration:run`, `migration:revert`, `migration:run` — all three clean.
+- Two traps were checked by deliberately breaking the implementation and confirming the tests
+  caught it: throwing inside `rotate`'s transaction (the rollback trap, risk #1) and replacing
+  `COALESCE("lastUsedAt", "createdAt")` with a bare `lastUsedAt` ordering. Both failed as
+  designed, then passed again once reverted.
+
+The manual browser checklist below (steps 1–11) has **not** been run — it needs a human at a
+browser.
 
 ---
 

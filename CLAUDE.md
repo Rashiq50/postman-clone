@@ -81,26 +81,70 @@ The e2e test asserts this — it fails if the global guard is removed.
 Dev seed user (from migration `AddUserNameAndSeedTestUser`, upgraded to Argon2 by a later one):
 `rashiqrahaman@yahoo.com` / `Password123!`.
 
-## Current state — auth is half-built
+### Sessions and refresh tokens
 
-Knowing where the seams are matters more than the finished parts:
+**A session is a device; a refresh token is one rotation step.** `SessionEntity` is one login
+with a stable id — the `sid` in every access token — and `RefreshTokenEntity` is one row per
+rotation, pointing back at it. Never collapse these back into one table: rotation would then
+replace the session row, killing every access token the instant its client refreshed, and
+`GET /sessions` would become a rotation log instead of a device list. The family *is* the
+session, so revoking one is a single `UPDATE sessions SET "revokedAt" = now()` and the children
+need no update — both `isActive` and `rotate` gate on the parent.
 
-- `POST /api/v1/auth/login` is the only auth route. **There is no refresh, logout, or session
-  rotation endpoint.** `SessionsController` is an empty shell and `SessionsService` carries
-  commented-out stubs (`findByRefreshToken`, `rotate`, `revoke`, `revokeAllForUser`,
-  `deleteExpiredSessions`) marking the intended surface.
-- Login returns the refresh token **in the JSON body**. `AUTH_COOKIE_NAME` is validated at boot
-  and `cookie-parser` is a dependency, but neither is wired up yet — the httpOnly-cookie path is
-  intended and unfinished.
-- `UsersService` is an empty class; `AuthService` talks to the user repository directly.
-- **The frontend auth is complete and is ahead of the backend.** It is written against the finished
-  API in [AUTH_PLAN.md](AUTH_PLAN.md) — `POST /auth/refresh`, `/auth/logout`, `/auth/logout-all`,
-  `GET /auth/me`, `GET /sessions`, `DELETE /sessions/:id`, and a login response of
-  `{ accessToken, expiresIn, user }` with the refresh token in an httpOnly cookie. Until Part 2
-  lands, everything except login 404s and login's response has no `user`, so the client cannot
-  finish signing in. Do not "fix" the client to match today's backend — finish the backend.
+- **The rollback trap.** On reuse detection the family must be revoked *and* the request
+  rejected. `rotateWithin` returns a discriminated `RotateOutcome` and `rotate` throws **after**
+  the transaction commits. Throwing from inside `manager.transaction` would roll back the
+  revocation you just wrote, leaving a detector that still 401s the caller — and so still looks
+  correct in casual testing — while never actually revoking anything. This is the single
+  highest-severity trap in the feature; `auth.e2e-spec.ts` catches it.
+- **Lock the token row alone.** `setLock('pessimistic_write')` with no join or `relations`:
+  Postgres rejects `FOR UPDATE` against the nullable side of an outer join, and TypeORM's
+  `findOne({ lock, relations })` throws outright. The session is loaded as a separate read.
+- **The grace window is anchored at first use.** On the benign two-tab path, the old row is left
+  completely untouched — `usedAt` is not re-stamped and `replacedByTokenId` is not overwritten.
+  Re-stamping would slide the window forward on every replay, so an attacker replaying every
+  `grace − ε` would read as benign forever and detection would never fire. There is an e2e test
+  specifically for this.
+- **Lock and grace are a pair.** The lock alone turns a double-tab race into a forced logout;
+  the grace window alone leaves the state machine non-deterministic.
+- Expiry is **absolute, never sliding**. `sessions.expiresAt` is set at login and never extended;
+  each child inherits it.
+- `lastUsedAt` is written in exactly one place — `rotate`'s happy path. Not per request: that
+  would turn the guard's single indexed PK read into a read plus a write on every API call.
+- `MAX_SESSIONS_PER_USER` is enforced inside `create`'s transaction, after the insert, as one
+  set-based statement. `ORDER BY COALESCE("lastUsedAt", "createdAt") DESC` is load-bearing —
+  `lastUsedAt` is null until a session's first rotation and Postgres sorts nulls first under
+  `DESC`, so a bare ordering would evict exactly the sessions in use.
+- Sessions are **revoked, never deleted**. `deleteExpiredSessions()` is implemented, unit-tested
+  and deliberately **uncalled** — a cron hook point. `@nestjs/schedule` is not a dependency.
+- `AuthService.login` revokes the session behind whatever refresh cookie the browser presented,
+  after the password check. The cookie is one shared browser-wide slot, so without this a
+  re-login in the same browser would strand the old session as a ghost device.
 
-### Frontend auth rules
+### The refresh cookie
+
+All of it lives in [refresh-cookie.ts](backend/src/auth/refresh-cookie.ts) as **plain functions,
+not an `@Injectable()`** — `SessionsController` needs `clearRefreshCookie` too, and a provider
+would force `SessionsModule → AuthModule` while `AuthModule` already imports `SessionsModule`.
+
+- `clearRefreshCookie` **must** spread the same options as `setRefreshCookie` minus `maxAge`.
+  One mismatched character and `clearCookie` leaves the cookie in place, so logout silently does
+  nothing while still answering 204. That asymmetry is the single most common bug in this
+  feature and the entire justification for the file; `refresh-cookie.spec.ts` pins it.
+- `Path=/api/v1/auth` is built from the API constants, and keeps the long-lived credential off
+  the task routes. It rules out the `__Host-` prefix, which requires `Path=/` — do **not**
+  "fix" `AUTH_COOKIE_NAME` into a `__Host-` name, or the browser will reject the cookie outright.
+- The refresh token appears **only** in the cookie, never in a response body.
+- `logout` is `@Public()` and reads the cookie: a protected logout 401s exactly when a user most
+  wants it to work. `logout-all` stays protected — it is global and destructive.
+- `refresh` and `logout` are `@Public()`, so `request.user` is undefined; `@CurrentUser()` must
+  never appear in either.
+- `@Res({ passthrough: true })` is mandatory on every cookie-touching handler. Without it Nest
+  stops serialising the return value and the handler hangs.
+- `SessionsModule` must **never** import `AuthModule` — that is a cycle, and it is unnecessary
+  because the guard is a global `APP_GUARD`.
+
+## Frontend auth rules
 
 - The single `baseApi` now lives in [app/baseApi.ts](frontend/src/app/baseApi.ts), **not** in
   `features/tasks/tasksApi.ts` — both `features/auth` and `features/tasks` depend on it. Features
@@ -127,6 +171,20 @@ Knowing where the seams are matters more than the finished parts:
 - Before dispatching `loggedOut()`, `baseQueryWithReauth` checks the access token is still the one the
   request failed under. A refresh that resolves after a login completed is stale and must not wipe the
   new session. Don't "simplify" that check away.
+
+## Current state
+
+Auth is complete on both sides: login, refresh with rotation and reuse detection, logout,
+logout-all, `GET /auth/me`, `GET /sessions` and `DELETE /sessions/:id` all exist, and the
+frontend described below is wired to them. `backend/test/auth.e2e-spec.ts` and
+`session-cap.e2e-spec.ts` cover the cycle end to end against a live Postgres.
+
+Known gaps, both deliberate and both noted in the README: there is **no registration endpoint**
+(users come from the seed migration), and **nothing rate-limits login or refresh** —
+`RATE_LIMITED` exists in `ApiErrorCode` with no producer, and `@nestjs/throttler` is not a
+dependency. The e2e suite also runs against the development database rather than a scratch one;
+it cleans up the seed user's sessions after itself, but a dedicated test database is still the
+right fix.
 
 ## Conventions
 

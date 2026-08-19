@@ -5,15 +5,13 @@ import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { UserEntity } from '../users/entities/user.entity';
 import { SessionsModule } from '../sessions/sessions.module';
+import { UsersModule } from '../users/users.module';
+import { OriginCheckGuard } from './origin-check.guard';
 
 @Module({
   imports: [
-    // AuthService still reads users through a repository directly; that moves
-    // to UsersService separately.
-    TypeOrmModule.forFeature([UserEntity]),
+    UsersModule,
     /**
      * Import the module, never re-provide `SessionsService`. Nest caches module
      * instances, so importing `SessionsModule` from two places still yields one
@@ -55,6 +53,10 @@ import { SessionsModule } from '../sessions/sessions.module';
   providers: [
     AuthService,
     JwtAuthGuard,
+    // Applied per-route with @UseGuards on the public, state-changing auth
+    // routes, not globally: it is a CSRF backstop for cookie-only credentials,
+    // and bearer-authenticated routes do not need it.
+    OriginCheckGuard,
     // Fail closed: every route in the application is authenticated unless it is
     // explicitly marked `@Public()`. `useExisting` rather than `useClass` so the
     // global guard and any explicit `@UseGuards(JwtAuthGuard)` share one

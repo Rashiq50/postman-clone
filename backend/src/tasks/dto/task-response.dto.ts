@@ -30,13 +30,13 @@ export class TaskResponseDto implements TaskContract {
   status: TaskStatus;
 
   @Expose()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     value instanceof Date ? value.toISOString() : value,
   )
   createdAt: string;
 
   @Expose()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     value instanceof Date ? value.toISOString() : value,
   )
   updatedAt: string;

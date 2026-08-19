@@ -100,6 +100,13 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 
 | Method | Route | Body | Response |
 | --- | --- | --- | --- |
+| `POST` | `/api/v1/auth/login` | `{ email, password }` | `AuthResponse` (200) + refresh cookie |
+| `POST` | `/api/v1/auth/refresh` | — | `AuthResponse` (200) + rotated cookie |
+| `POST` | `/api/v1/auth/logout` | — | 204, cookie cleared |
+| `POST` | `/api/v1/auth/logout-all` | — | 204, every session revoked |
+| `GET` | `/api/v1/auth/me` | — | `AuthUser` |
+| `GET` | `/api/v1/sessions?page=1&limit=20` | — | `Paginated<SessionSummary>` |
+| `DELETE` | `/api/v1/sessions/:id` | — | 204 |
 | `GET` | `/api/v1/tasks?page=1&limit=20` | — | `Paginated<Task>` |
 | `POST` | `/api/v1/tasks` | `{ title, description?, status? }` | `Task` (201) |
 | `GET` | `/api/v1/tasks/:id` | — | `Task` |
@@ -168,6 +175,62 @@ trace in the server log.
 On the client, `src/lib/api-error.ts` has `toApiError`, `errorMessage` and `fieldErrors`.
 `toApiError` returns `null` when the failure never reached the API — a dropped connection or
 a proxy error page — so those are not reported as if the API had spoken.
+
+### Auth on the server
+
+Every route is authenticated by default: `JwtAuthGuard` is registered as a global `APP_GUARD`,
+so a new endpoint is protected unless it carries `@Public()`. Forgetting `@Public()` on a
+genuinely public route is the failure mode here, not the reverse — and an e2e test fails if the
+global guard is ever removed.
+
+**Two token types, two lifetimes.** A short-lived JWT access token goes in the response body
+and is sent as `Authorization: Bearer …`. The long-lived refresh token never appears in a
+response body at all — it travels only in an httpOnly cookie scoped to `Path=/api/v1/auth`, so
+no script on the page can read it and it is never attached to `/api/v1/tasks`.
+
+**A session is a device; a refresh token is one rotation step.** `sessions` holds one row per
+login, with a stable id that access tokens carry as `sid`. `refresh_tokens` holds one row per
+rotation, all pointing back at that session. The split is what lets a refresh rotate the token
+without disturbing access tokens already in flight, keeps `GET /sessions` a list of devices
+rather than a rotation log, and makes revoking a whole family a single
+`UPDATE sessions SET "revokedAt" = now()`.
+
+**Rotation with reuse detection.** Every refresh spends its token and mints a replacement.
+Presenting a token that was already spent means one of two things:
+
+- inside `REFRESH_ROTATION_GRACE_MS` — two tabs raced, so another child is minted off the same
+  parent and nothing is revoked. The window is measured from the token's *first* use and is
+  never re-stamped; sliding it forward would let an attacker replay a stolen token forever
+  without ever tripping detection.
+- past that window — the token leaked. The entire session family is revoked, which kills both
+  the refresh chain and every access token issued from that session on their next request.
+
+Unknown, expired and already-revoked tokens revoke nothing: expiry is not theft, and a random
+guess must not be able to log somebody out. All four failures return the same
+`401 UNAUTHENTICATED` with the same message — the client's remedy is identical, and confirming
+to an attacker that a replay was *detected* is free intelligence. The detail goes to the log.
+
+**Expiry is absolute, never sliding.** `sessions.expiresAt` is set at login and never extended,
+and each rotated token inherits it. Sliding expiry would let a stolen token grant indefinite
+access, which is exactly what reuse detection exists to bound.
+
+**Session hygiene.** `MAX_SESSIONS_PER_USER` caps concurrent logins, revoking the least
+recently active past the cap on the next login — ordered by `COALESCE("lastUsedAt",
+"createdAt")`, since `lastUsedAt` is null until a session's first rotation and would otherwise
+sort as *most* recent. Logging in twice in one browser also revokes the session behind the
+cookie being overwritten, so a re-login does not leave a ghost device in `GET /sessions`.
+Sessions are revoked, never deleted; `deleteExpiredSessions()` is the cron hook point for
+collecting them once `expiresAt` passes, and is deliberately not wired to a scheduler.
+
+**CSRF.** `/auth/refresh` and `/auth/logout` must be public — the access token is expired by
+definition — so their only credential is an automatically-attached cookie. `SameSite=Lax`
+closes this, since both are POST-only and unreachable by top-level navigation. An
+`OriginCheckGuard` rejects a present-but-foreign `Origin` as a second layer, so the protection
+does not silently depend on `COOKIE_SAME_SITE` never becoming `none`.
+
+**Known gap:** nothing rate-limits login or refresh. `RATE_LIMITED` exists in `ApiErrorCode`
+and has no producer; `@nestjs/throttler` is not a dependency. Both endpoints are
+brute-forceable, and the session cap bounds stored rows but not attempts.
 
 ## Frontend
 

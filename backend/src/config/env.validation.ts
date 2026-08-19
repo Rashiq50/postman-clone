@@ -39,7 +39,42 @@ export const envValidationSchema = Joi.object({
     .pattern(/^\d+(ms|s|m|h|d)$/)
     .required(),
   AUTH_COOKIE_NAME: Joi.string().required(),
-});
+
+  // Cookie attributes. `secure` defaults by environment so a developer on
+  // http://localhost is not handed a cookie the browser then refuses to send
+  // back, while production defaults to the safe value.
+  COOKIE_SECURE: Joi.boolean().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.boolean().default(true),
+    otherwise: Joi.boolean().default(false),
+  }),
+  COOKIE_SAME_SITE: Joi.string().valid('lax', 'strict', 'none').default('lax'),
+  // Empty means host-only, which is what a single-origin deployment wants.
+  COOKIE_DOMAIN: Joi.string().hostname().allow('').default(''),
+  // How long after a refresh token is first spent a replay still reads as two
+  // tabs racing rather than theft. See `SessionsService.rotate`.
+  REFRESH_ROTATION_GRACE_MS: Joi.number().integer().min(0).default(10000),
+  // Concurrent live sessions per user; anything past the cap is revoked
+  // oldest-by-last-activity on the next login. A developer legitimately has a
+  // desktop app + browser + dev browser + private window + a second machine,
+  // so this sits well above "a few": it bounds abuse rather than policing
+  // normal use.
+  MAX_SESSIONS_PER_USER: Joi.number().integer().min(1).default(10),
+})
+  /**
+   * `SameSite=None` without `Secure` is dropped outright by every current
+   * browser, and the failure is invisible from the server: login returns 200,
+   * the cookie never lands, and every refresh afterwards 401s. Name it at boot
+   * instead.
+   */
+  .custom((value: Record<string, unknown>) => {
+    if (value.COOKIE_SAME_SITE === 'none' && value.COOKIE_SECURE !== true) {
+      throw new Error(
+        'COOKIE_SAME_SITE=none requires COOKIE_SECURE=true; browsers silently drop such a cookie',
+      );
+    }
+    return value;
+  });
 
 export const envValidationOptions = {
   // Report every problem at once rather than one per restart.

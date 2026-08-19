@@ -1,11 +1,10 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { hashPassword } from '../common/crypto/password';
 import { SessionsService } from '../sessions/sessions.service';
 import { UserEntity } from '../users/entities/user.entity';
+import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import type { JwtPayload } from './jwt-payload';
 
@@ -18,9 +17,15 @@ const PASSWORD = 'Password123!';
 describe('AuthService', () => {
   let service: AuthService;
   let jwtService: JwtService;
-  let usersRepository: { findOne: jest.Mock };
-  let sessionsService: { create: jest.Mock };
+  let usersService: { findByEmail: jest.Mock; findById: jest.Mock };
+  let sessionsService: {
+    create: jest.Mock;
+    rotate: jest.Mock;
+    revokeByRefreshToken: jest.Mock;
+    revokeAllForUser: jest.Mock;
+  };
   let user: UserEntity;
+  let refreshExpiresAt: Date;
 
   beforeEach(async () => {
     user = {
@@ -29,12 +34,25 @@ describe('AuthService', () => {
       passwordHash: await hashPassword(PASSWORD),
     } as UserEntity;
 
-    usersRepository = { findOne: jest.fn().mockResolvedValue(user) };
+    refreshExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    usersService = {
+      findByEmail: jest.fn().mockResolvedValue(user),
+      findById: jest.fn().mockResolvedValue(user),
+    };
     sessionsService = {
       create: jest.fn().mockResolvedValue({
         session: { id: 'session-1' },
         refreshToken: 'refresh-token',
+        expiresAt: refreshExpiresAt,
       }),
+      rotate: jest.fn().mockResolvedValue({
+        session: { id: 'session-1', userId: 'user-1' },
+        refreshToken: 'rotated-token',
+        expiresAt: refreshExpiresAt,
+      }),
+      revokeByRefreshToken: jest.fn().mockResolvedValue(undefined),
+      revokeAllForUser: jest.fn().mockResolvedValue(1),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -54,10 +72,7 @@ describe('AuthService', () => {
       providers: [
         AuthService,
         { provide: SessionsService, useValue: sessionsService },
-        {
-          provide: getRepositoryToken(UserEntity),
-          useValue: usersRepository,
-        },
+        { provide: UsersService, useValue: usersService },
       ],
     }).compile();
 
@@ -122,23 +137,49 @@ describe('AuthService', () => {
         JSON.stringify({ sub: 'admin', sid: 'session-1', jti: 'x' }),
       ).toString('base64url');
 
-      expect(() =>
+      expect(() => {
         jwtService.verify(`${header}.${forged}.${signature}`, {
           secret: TEST_SECRET,
-        }),
-      ).toThrow();
+        });
+      }).toThrow();
     });
   });
 
   describe('login', () => {
-    it('returns both tokens for correct credentials', async () => {
+    it('returns the tokens, the user and the access token lifetime', async () => {
       const result = await service.login(user.email, PASSWORD);
 
       expect(result.refreshToken).toBe('refresh-token');
+      expect(result.refreshExpiresAt).toBe(refreshExpiresAt);
+      expect(result.user).toBe(user);
       expect(jwtService.decode<JwtPayload>(result.accessToken).sub).toBe(
         'user-1',
       );
-      expect(sessionsService.create).toHaveBeenCalledWith('user-1');
+    });
+
+    // Derived from the token just signed rather than re-read from config, so
+    // it cannot drift from the JwtModule factory.
+    it('derives expiresIn from the signed token, not from config', async () => {
+      const { accessToken, expiresIn } = await service.login(
+        user.email,
+        PASSWORD,
+      );
+      const { exp, iat } = jwtService.decode<JwtPayload>(accessToken);
+
+      expect(expiresIn).toBe(exp - iat);
+      expect(expiresIn).toBe(15 * 60);
+    });
+
+    it('passes the request context through to the new session', async () => {
+      await service.login(user.email, PASSWORD, {
+        userAgent: 'Mozilla/5.0',
+        ipAddress: '203.0.113.7',
+      });
+
+      expect(sessionsService.create).toHaveBeenCalledWith('user-1', {
+        userAgent: 'Mozilla/5.0',
+        ipAddress: '203.0.113.7',
+      });
     });
 
     it('rejects a wrong password without creating a session', async () => {
@@ -149,12 +190,120 @@ describe('AuthService', () => {
     });
 
     it('rejects an unknown email with the same message as a wrong password', async () => {
-      usersRepository.findOne.mockResolvedValue(null);
+      usersService.findByEmail.mockResolvedValue(null);
 
       await expect(
         service.login('nobody@example.com', PASSWORD),
       ).rejects.toThrow('Invalid credentials');
       expect(sessionsService.create).not.toHaveBeenCalled();
+    });
+
+    describe('same-browser session revocation', () => {
+      it('revokes the session behind the cookie the browser presented', async () => {
+        await service.login(user.email, PASSWORD, undefined, 'old-cookie');
+
+        expect(sessionsService.revokeByRefreshToken).toHaveBeenCalledWith(
+          'old-cookie',
+        );
+      });
+
+      it('revokes the old session before issuing the new one', async () => {
+        const order: string[] = [];
+        sessionsService.revokeByRefreshToken.mockImplementation(() => {
+          order.push('revoke');
+          return Promise.resolve();
+        });
+        sessionsService.create.mockImplementation(() => {
+          order.push('create');
+          return Promise.resolve({
+            session: { id: 'session-2' },
+            refreshToken: 'refresh-token',
+            expiresAt: refreshExpiresAt,
+          });
+        });
+
+        await service.login(user.email, PASSWORD, undefined, 'old-cookie');
+
+        expect(order).toEqual(['revoke', 'create']);
+      });
+
+      // An unauthenticated POST /auth/login must not be able to kill a session.
+      it('does not revoke anything when the password is wrong', async () => {
+        await expect(
+          service.login(user.email, 'wrong', undefined, 'old-cookie'),
+        ).rejects.toThrow(UnauthorizedException);
+
+        expect(sessionsService.revokeByRefreshToken).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('refresh', () => {
+    it('rotates the token and re-issues an access token for the same session', async () => {
+      const result = await service.refresh('presented-token');
+
+      expect(sessionsService.rotate).toHaveBeenCalledWith('presented-token');
+      expect(result.refreshToken).toBe('rotated-token');
+      expect(result.user).toBe(user);
+
+      const payload = jwtService.decode<JwtPayload>(result.accessToken);
+      expect(payload.sub).toBe('user-1');
+      // The stable session id is the whole point of the child-table design:
+      // access tokens already in flight keep working across a rotation.
+      expect(payload.sid).toBe('session-1');
+    });
+
+    it('rejects a missing cookie without touching the session store', async () => {
+      await expect(service.refresh(undefined)).rejects.toThrow(
+        'Invalid refresh token',
+      );
+      expect(sessionsService.rotate).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the session outlived its user', async () => {
+      usersService.findById.mockResolvedValue(null);
+
+      await expect(service.refresh('presented-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+  });
+
+  describe('logout', () => {
+    it('revokes the session behind the presented token', async () => {
+      await service.logout('presented-token');
+
+      expect(sessionsService.revokeByRefreshToken).toHaveBeenCalledWith(
+        'presented-token',
+      );
+    });
+
+    // A client calling logout has already decided the session is over; a
+    // rejection here would leave the UI stuck signed in over nothing it can fix.
+    it('resolves when no cookie was presented at all', async () => {
+      await expect(service.logout(undefined)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('logoutAll', () => {
+    it('revokes every session the user has', async () => {
+      await service.logoutAll('user-1');
+
+      expect(sessionsService.revokeAllForUser).toHaveBeenCalledWith('user-1');
+    });
+  });
+
+  describe('me', () => {
+    it('returns the user behind a verified token', async () => {
+      await expect(service.me('user-1')).resolves.toBe(user);
+    });
+
+    // 401, not 404: the token verified but its subject no longer exists, and
+    // the caller's remedy is to log in again rather than to look elsewhere.
+    it('is unauthorized, not not-found, when the user is gone', async () => {
+      usersService.findById.mockResolvedValue(null);
+
+      await expect(service.me('user-1')).rejects.toThrow(UnauthorizedException);
     });
   });
 });
