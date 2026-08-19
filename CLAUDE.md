@@ -292,6 +292,14 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
 - **The workspace id lives in the URL, not Redux.** With no `localStorage`/`redux-persist`
   allowed, an id in Redux does not survive a reload and every refresh would silently pick "the
   first workspace" — invisible until a user has two.
+- ⚠️ **Because the id is in the URL it outlives the session that produced it, so `WorkspaceGuard`
+  wraps `w/:workspaceId` and bounces an id the signed-in user does not own back to `/`.** The
+  path that needs it: signing out sends `RequireAuth` to `/login` with
+  `from = /w/<previous user's workspace>`, and `LoginPage` navigates to `from` after *whoever*
+  signs in next — so user B lands on user A's URL and every request 404s. The guard sits above
+  `WorkbenchShell` so the sidebar never mounts against a foreign id, and it lets the route
+  through when the workspace list itself failed to load (a failed list is not evidence the id is
+  wrong, and `/` would hit the same failure).
 - **One `Tree` tag per workspace.** The tree is a single HTTP response, so a per-collection tag
   could never cause a partial refetch. ⚠️ **Every mutation argument carries `workspaceId` even
   though the server ignores it** — it is the invalidation key and there is no other way to

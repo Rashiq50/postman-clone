@@ -6,6 +6,7 @@ import { EmptyEditorState } from '../features/requests/EmptyEditorState'
 import { RequestEditor } from '../features/requests/RequestEditor'
 import { SessionsPage } from '../features/sessions/SessionsPage'
 import { TasksPage } from '../features/tasks/TasksPage'
+import { WorkspaceGuard } from '../features/workspaces/WorkspaceGuard'
 import { WorkspaceRedirect } from '../features/workspaces/WorkspaceRedirect'
 import { AppShell } from './AppShell'
 import { WorkbenchShell } from './WorkbenchShell'
@@ -34,12 +35,23 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <WorkspaceRedirect /> },
       {
-        element: <WorkbenchShell />,
+        // `w/:workspaceId` is matched once, by the guard, and the shell nests
+        // inside it: the id must be checked against the user's own workspaces
+        // before `WorkbenchShell` mounts a sidebar against it. See
+        // `WorkspaceGuard` for the sign-out/sign-in path that makes a foreign
+        // id land here in the first place.
+        path: 'w/:workspaceId',
+        element: <WorkspaceGuard />,
         children: [
-          { path: 'w/:workspaceId', element: <EmptyEditorState /> },
           {
-            path: 'w/:workspaceId/requests/:requestId',
-            element: <RequestEditor />,
+            element: <WorkbenchShell />,
+            children: [
+              { index: true, element: <EmptyEditorState /> },
+              {
+                path: 'requests/:requestId',
+                element: <RequestEditor />,
+              },
+            ],
           },
         ],
       },
