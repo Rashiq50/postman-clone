@@ -105,8 +105,13 @@ contracts remains the single source of truth either way.
 ### 1.3 `collections`
 
 `id`, `workspaceId` → `workspaces` CASCADE, `name varchar(200)`, `description text NULL`,
-`position integer NOT NULL DEFAULT 0`, timestamps.
+`position integer NOT NULL`, timestamps.
 `IDX_collections_workspaceId_position` on `("workspaceId","position")`.
+
+**No `DEFAULT` on any `position` column, anywhere.** The service always assigns
+`MAX + 1024` (§3); a default is a value the ordering logic never produces, so the only
+thing it can ever do is mask a code path that forgot to compute one — better as a
+not-null violation than as a row silently sorted first.
 
 **No uniqueness on `name`.** Postman allows duplicate names, and a 409 here is a worse
 experience than two identically-named collections.
@@ -241,6 +246,18 @@ export const SCOPED_COLLECTION_IDS = `
   JOIN "workspace_members" m ON m."workspaceId" = c."workspaceId"
   WHERE m."userId" = :userId AND m."role" = ANY(:roles)
 `;
+
+/** Workspace ids the caller holds one of `:roles` in. The workspace-level
+ *  sibling of SCOPED_COLLECTION_IDS: PATCH/DELETE /workspaces/:id and the
+ *  environments endpoints scope on membership directly (there is no
+ *  collection in the chain), and §2.2's role table — manage = ADMIN_ROLES,
+ *  delete = OWNER only — connects to queries through this fragment's `roles`
+ *  argument. Without it each service improvises its own membership JOIN and
+ *  the "roles live nowhere but the array" rule quietly stops being true. */
+export const SCOPED_WORKSPACE_IDS = `
+  SELECT m."workspaceId" FROM "workspace_members" m
+  WHERE m."userId" = :userId AND m."role" = ANY(:roles)
+`;
 ```
 
 `PATCH /requests/:id` is then one statement:
@@ -254,6 +271,41 @@ const result = await this.repo.createQueryBuilder()
 
 if (!result.affected) await this.explainDenial(userId, id);   // failure path only
 ```
+
+### 2.0 The create path — the pattern above does not transfer, so spell it out
+
+The `UPDATE … WHERE id AND collectionId IN (scoped)` shape covers update, move and
+delete. **It does not cover `POST`** — there is no row to scope, `affected === 0` never
+arises, and `explainDenial` keys on an id that does not exist yet. §2.1 point 2 calls the
+unauthorized create "the single most likely bug in this slice"; leaving its mechanism
+unspecified is how that bug ships. The mechanism:
+
+Create is already a transaction whether we like it or not — it needs the sibling
+`MAX("position") + 1024` read before the insert. So inside that transaction:
+
+1. **Scoped parent resolve.** `SELECT c."id", c."workspaceId" FROM "collections" c WHERE
+   c."id" = :collectionId AND c."id" IN (${SCOPED_COLLECTION_IDS})` with `WRITE_ROLES`.
+   Zero rows → denial (below). If a `folderId` is in the body, resolve it the same way
+   **and** assert `folder."collectionId" = :collectionId` — a folder from another
+   collection is a 404, same reasoning as move targets.
+2. The sibling `MAX("position")` read (`IS NOT DISTINCT FROM` on the parent, per §3.1).
+3. The `INSERT`.
+
+The check-then-insert gap this opens is closed by the FKs, not by hoping: if the
+collection is deleted between 1 and 3, the insert fails on `FK_requests_collectionId` —
+the race degrades to an error, never to a cross-tenant write. That is why a scoped
+`SELECT` inside the transaction is acceptable here while a guard (§2.1) is not: the guard
+trusts a check made *outside* the statement's transaction with no constraint backstop.
+
+**Denial on create** cannot reuse `explainDenial` (no request id). A sibling helper keyed
+on the parent: visible under `READ_ROLES` but not `WRITE_ROLES` → `403 FORBIDDEN`; not
+visible at all → `404` naming the *collection* id. Same 404-vs-403 policy as §2.4,
+anchored on the parent because the parent is what the caller named.
+
+The same three-step shape applies to every create with a parent id in the body:
+`POST /collections` (parent = workspace, via `SCOPED_WORKSPACE_IDS`), `POST /folders`
+(parent = collection, plus the `parentFolderId`-same-collection assert),
+`POST /environments` (parent = workspace).
 
 ### 2.1 Why not a guard — four failure modes, not stylistic ones
 
@@ -631,7 +683,8 @@ Same for `RequestAuthConstraint` and `KeyValueEntriesConstraint`.
 | `GET` | `/api/v1/workspaces?page=&limit=` | `Paginated<Workspace>` |
 | `POST` `GET` `PATCH` `DELETE` | `/api/v1/workspaces[/:id]` | `Workspace` / 204 (**409 if personal**) |
 | `GET` | `/api/v1/workspaces/:id/tree` | `WorkspaceTree` — single resource |
-| `GET` `POST` | `/api/v1/workspaces/:id/environments`, `/api/v1/environments` | `Paginated<Environment>` / `Environment` |
+| `GET` | `/api/v1/workspaces/:id/environments` | `Paginated<Environment>` — list is nested: a workspace id is not derivable from anything else |
+| `POST` | `/api/v1/environments` | `Environment` — create is flat with `workspaceId` in the body, the same rule as every other resource |
 | `POST` `PATCH` `DELETE` | `/api/v1/collections[/:id]` | `Collection` / 204 |
 | `PATCH` | `/api/v1/collections/:id/move` | `Collection` |
 | `POST` `PATCH` `DELETE` | `/api/v1/folders[/:id]` | `Folder` / 204 |
@@ -699,6 +752,9 @@ looks like a CSS mistake rather than a default.
 ### 7.2 Routes — the workspace id lives in the URL
 
 ```tsx
+// ALL of this sits inside the existing { element: <RequireAuth /> } wrapper —
+// the workbench is authenticated like everything else. /login and /register
+// stay outside it, unchanged.
 { index: true, element: <WorkspaceRedirect /> },
 { element: <WorkbenchShell />, children: [
     { path: 'w/:workspaceId', element: <EmptyEditorState /> },
@@ -708,7 +764,13 @@ looks like a CSS mistake rather than a default.
     { path: 'tasks', element: <TasksPage /> },
     { path: 'sessions', element: <SessionsPage /> },
 ]},
+{ path: '*', element: <Navigate to="/" replace /> },
 ```
+
+⚠️ The current router's catch-all lives *inside* `AppShell` and points at `/tasks`
+([router.tsx](frontend/src/app/router.tsx)). It must move up a level (it now covers two
+shells) and point at `/` — otherwise every mistyped URL still lands on the deprecated
+tasks page instead of the workspace redirect.
 
 **URL over a Redux slice**, and the argument is not aesthetic: this codebase has a hard rule
 against `localStorage`/`sessionStorage`/`redux-persist`, so a workspace id in Redux does not
@@ -792,12 +854,14 @@ tab body.
 ### 7.5 RTK Query
 
 ```ts
-tagTypes: ['Task', 'Session', 'Me', 'Workspace', 'Tree', 'Request', 'Environment'],
+tagTypes: ['Task', 'Session', 'Me', 'Workspace', 'Tree', 'Request'],
 ```
 
 **Deliberately no `Collection` or `Folder` tag** — neither has a read endpoint in this slice;
 they exist only inside the tree, and a tag nothing provides is dead weight that looks like
-coverage.
+coverage. **No `Environment` tag either, by the same rule**: this slice builds no
+`environmentsApi` and no environment UI (§1.6), so nothing would provide or invalidate it.
+It arrives with the slice that consumes it.
 
 - `getTree(workspaceId)` provides `[{ type: 'Tree', id: workspaceId }]`.
 - Every collection/folder mutation, and request create/delete/move, invalidates that tag.
@@ -833,10 +897,10 @@ element the user is looking at. Everything else refetches — do not gold-plate.
 |---|---|
 | `common/ordering.spec.ts` | empty / append / prepend (a negative result is legal) / between / `'reindex'` when the gap is 1 / index clamped |
 | `workspaces/provision-personal-workspace.spec.ts` | one workspace + one `OWNER` row, `isPersonal: true`, and **both writes go through the *passed* manager** — this is what catches "opened its own connection and escaped the transaction" |
-| `workspaces/workspace-scope.spec.ts` | roles are bound as a parameter, never interpolated into SQL |
+| `workspaces/workspace-scope.spec.ts` | roles are bound as a parameter, never interpolated into SQL — both fragments (`SCOPED_COLLECTION_IDS`, `SCOPED_WORKSPACE_IDS`) |
 | `collections/build-tree.spec.ts` | nesting; folders before requests; the `position, createdAt, id` tiebreak; an orphan attaches to root and is **not dropped**; empty → `collections: []` |
 | `collections/folders.service.spec.ts` | move into own descendant rejected; legal move succeeds |
-| `requests/requests.service.spec.ts` | mirrors `tasks.service.spec.ts`; `affected === 0` → `explainDenial`; create scopes on the **body's** `collectionId` |
+| `requests/requests.service.spec.ts` | mirrors `tasks.service.spec.ts`; `affected === 0` → `explainDenial`; create runs the §2.0 scoped parent resolve on the **body's** `collectionId`, and its denial keys on the parent (403 when readable, 404 when invisible) |
 | `requests/dto/request-response.dto.spec.ts` | jsonb survives `excludeExtraneousValues`; unexposed columns are dropped |
 | `auth/auth.service.spec.ts` (edit) | `register` still throws `EMAIL_TAKEN` when the 23505 is raised **from inside the transaction** |
 
@@ -856,7 +920,10 @@ overridden via the provider token, not `process.env`; cookie name from `ConfigSe
 4. **Cross-tenant isolation.** User B against user A's ids: `GET`/`PATCH`/`DELETE /requests/:id`
    → 404; `GET /workspaces/:aId/tree` → 404; **`POST /requests` with A's `collectionId` → 404**
    (the case a route-param guard would pass — the most important assertion in the file);
-   `PATCH /requests/:bId/move` targeting A's `folderId` → 404.
+   `PATCH /requests/:bId/move` targeting A's `folderId` → 404. For that last one to be
+   deterministic, the move handler must resolve the **target** folder through the scoped
+   query *before* the same-collection check — an unscoped resolve would hit the
+   same-collection 404/409 first and the assertion would pass for the wrong reason.
 5. **Role seam.** Insert a `VIEWER` membership by raw `dataSource.query`: `GET /tree` → 200,
    `PATCH /requests/:id` → 403 `FORBIDDEN`, `POST /requests` → 403.
 6. **Move.** Root → folder → back. Two sequential moves land in order. Folder into its own
@@ -957,3 +1024,10 @@ Then `cd backend && yarn lint` (note: `eslint --fix`, it rewrites files) and
     widen it; never touch the seed user; keep `--runInBand`.
 17. **`yarn lint` in `backend/` is `eslint --fix`** — it rewrites files, and leaves ~15
     pre-existing unfixable errors. A red lint is not necessarily your change.
+18. ⚠️ **The scoped-UPDATE pattern does not cover `POST`** (§2.0). Every create must do the
+    scoped parent resolve inside its transaction, with the FK as the race backstop and the
+    parent-keyed denial helper — `explainDenial` cannot be reused (no row id exists yet).
+    Copying the update pattern's shape onto create is exactly how the §2.1-point-2 bug ships.
+19. **A tag nothing provides is dead weight** — no `Collection`, `Folder` *or* `Environment`
+    tag in this slice (§7.5). Adding one "for completeness" makes the cache look covered
+    where it is not.
