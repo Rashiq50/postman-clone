@@ -191,8 +191,9 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
 - The access token is held **in memory only**, in `authSlice`. No `localStorage`, no
   `sessionStorage`, no `redux-persist`. A reload restores the session through the refresh cookie.
   Adding any persistence layer here is the thing to catch in review. (The theme preference is
-  in `localStorage` — see *Theming*. That is a display setting, not a credential, and it is
-  the only thing this app stores.)
+  in `localStorage` — see *Theming*, and the sidebar's expansion set is too — see *Frontend
+  workbench rules*. Those are display state, not credentials, and they are the only things
+  this app stores.)
 - No module-level token mirror. `prepareHeaders` reads the store. The `baseApi ↔ authSlice` cycle
   is type-only (`import type` + `verbatimModuleSyntax` emits nothing), so it does not exist at runtime.
 - `runRefresh` in `baseApi.ts` calls the refresh URL through `rawBaseQuery` on purpose. Routing it
@@ -295,9 +296,9 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   `AppHeader` takes one `wide` prop. ⚠️ `min-h-0` on the workbench grid and `<main>` is
   load-bearing — a grid child defaults to `min-height: auto`, so without it the panes size to
   content and the whole page scrolls.
-- **The workspace id lives in the URL, not Redux.** Nothing but the theme preference is
-  persisted, so an id in Redux does not survive a reload and every refresh would silently
-  pick "the first workspace" — invisible until a user has two.
+- **The workspace id lives in the URL, not Redux.** Nothing is persisted in Redux at all, so
+  an id there does not survive a reload and every refresh would silently pick "the first
+  workspace" — invisible until a user has two.
 - ⚠️ **Because the id is in the URL it outlives the session that produced it, so `WorkspaceGuard`
   wraps `w/:workspaceId` and bounces an id the signed-in user does not own back to `/`.** The
   path that needs it: signing out sends `RequireAuth` to `/login` with
@@ -353,8 +354,26 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   *every* row on every chevron click, because whatever prop or context carries the value down
   changes identity and defeats `React.memo` on everything in between. The store's identity never
   changes, so a toggle re-renders the toggled row and the subtree it mounts, and nothing else.
-  It is still not Redux (an action per chevron click for state nothing outside the sidebar reads)
-  and still not persisted (expansion resets on reload — accepted).
+  It is still not Redux (an action per chevron click for state nothing outside the sidebar reads).
+- ⚠️ **Expansion — and only expansion — is persisted**, per workspace, under
+  `pc.tree.expanded.<workspaceId>` in `localStorage`
+  ([treeExpansion.ts](frontend/src/features/tree/treeExpansion.ts)). Renaming and the active
+  request stay in memory: the first is a transient mode, the second already lives in the URL.
+  - ⚠️ **It is read during the render that creates the store, never in an effect.** An effect
+    runs after the first paint, so the tree would paint collapsed and then pop open — the same
+    one-frame flash the theme's inline script in `index.html` exists to avoid.
+  - **Writes are debounced (250ms) and coalesced**; a chevron click is a `Set` mutation plus a
+    notify, never a synchronous `JSON.stringify` + `setItem`. `useTreeUiStore` flushes on
+    unmount and on `pagehide`, so the last toggle before a close is not lost.
+  - ⚠️ **The set is capped at 2000 ids, not pruned against the tree.** Deleted nodes' ids are
+    never cleaned by anything else, and walking every node on each cache patch is exactly the
+    cost Phases 1–3 removed. A stale id is inert — `isExpanded` answers true for a row that no
+    longer renders. `toggle` re-inserts on open so insertion order is recency and the cap drops
+    the head.
+  - ⚠️ **The store is rebuilt when `workspaceId` changes**, since `Sidebar` is not remounted
+    across workspaces; a store built once would persist workspace A's set under A's key while
+    showing B. Every storage access is inside a `try`/`catch` — Safari's private mode throws on
+    `setItem` and the sidebar must degrade to forgetting, not to breaking a click.
 - ⚠️ **The three node views are `React.memo`'d and their props must stay referentially stable.**
   `Sidebar` builds the `TreeHandlers` object with `useMemo` over stable deps only; `tree` and
   `requestId` reach `menuFor` through a **ref**, because closing over them would give `handlers` a

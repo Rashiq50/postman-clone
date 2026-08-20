@@ -59,7 +59,7 @@ export function Sidebar() {
     refetchOnReconnect: true,
   })
 
-  const ui = useTreeUiStore()
+  const ui = useTreeUiStore(workspaceId)
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null)
 
   const [createCollection] = useCreateCollectionMutation()
