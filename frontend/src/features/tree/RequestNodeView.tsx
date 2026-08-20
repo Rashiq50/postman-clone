@@ -66,11 +66,11 @@ export const RequestNodeView = memo(function RequestNodeView({
       }
     >
       <span
-        className={`mr-2 font-mono text-[10px] font-semibold ${methodStyles[node.method]}`}
+        className={`shrink-0 font-mono text-[10px] font-semibold ${methodStyles[node.method]}`}
       >
         {node.method}
       </span>
-      {node.name}
+      <span className="truncate">{node.name}</span>
     </NodeRow>
   )
 })

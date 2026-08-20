@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 
-/** The row chrome every node shares: chevron, label, kebab. */
+/** The row chrome every node shares: chevron, icon, label, kebab. */
 export function NodeRow({
   depth,
   isActive,
   onClick,
   chevron,
+  icon,
   children,
   menu,
 }: {
@@ -13,6 +14,7 @@ export function NodeRow({
   isActive?: boolean
   onClick?: () => void
   chevron?: ReactNode
+  icon?: ReactNode
   children: ReactNode
   menu?: ReactNode
 }) {
@@ -26,11 +28,15 @@ export function NodeRow({
       style={{ paddingLeft: 8 + depth * 14 }}
     >
       {chevron}
+      {/* The icon lives *inside* the label button rather than beside it, so
+          clicking it does what clicking the name does. `min-w-0` is what lets
+          the label's `truncate` win against the flex item's content width. */}
       <button
         type="button"
         onClick={onClick}
-        className="min-w-0 flex-1 truncate py-1 text-left"
+        className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
       >
+        {icon}
         {children}
       </button>
       {menu}

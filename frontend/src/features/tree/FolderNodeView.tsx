@@ -2,6 +2,7 @@ import type { FolderNode } from '@postman-clone/contracts'
 import { memo } from 'react'
 import { InlineRename } from './InlineRename'
 import { NodeMenu } from './NodeMenu'
+import { FolderIcon } from './NodeIcon'
 import { Chevron, NodeRow } from './NodeRow'
 import { RequestNodeView } from './RequestNodeView'
 import type { TreeHandlers } from './treeHandlers'
@@ -57,6 +58,7 @@ export const FolderNodeView = memo(function FolderNodeView({
             label={node.name}
           />
         }
+        icon={<FolderIcon open={expanded} />}
         menu={
           <NodeMenu
             getItems={() =>
@@ -71,7 +73,7 @@ export const FolderNodeView = memo(function FolderNodeView({
           />
         }
       >
-        <span className="text-fg-muted">{node.name}</span>
+        <span className="truncate text-fg-muted">{node.name}</span>
       </NodeRow>
 
       {expanded && (

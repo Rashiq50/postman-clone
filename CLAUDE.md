@@ -387,7 +387,13 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   Reorder gets the node's current parent from `MenuContext.parentId` (i.e. from the node itself)
   rather than by walking the tree for it.
 - No icon library and no editor library — text glyphs (`▸ ▾ ⋯`) and a plain `<textarea>` with a
-  Format JSON button. Both are dependency decisions belonging to the execution slice.
+  Format JSON button. Both are dependency decisions belonging to the execution slice. The two
+  node icons in [NodeIcon.tsx](frontend/src/features/tree/NodeIcon.tsx) are hand-written inline
+  SVG for the same reason, drawn in `currentColor` only — a baked-in hex would be the one thing
+  on the page that ignores the theme. A collection is an archive box and a folder is a folder
+  (open when expanded); a request has no icon, its method label being its marker already.
+  ⚠️ The icon renders **inside** `NodeRow`'s label button, which is therefore a flex row: the
+  label needs its own `truncate` span now, since `truncate` on the button no longer reaches it.
 - **No Send button, not even a disabled one.** Deliberate; see `RequestUrlBar.tsx`.
 - Login and register default their post-auth `from` to `/`, the workbench.
 
