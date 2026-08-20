@@ -178,7 +178,7 @@ describe('Auth and sessions (e2e)', () => {
       );
 
       await agent
-        .get('/api/v1/tasks')
+        .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${authBody(first).accessToken}`)
         .expect(200);
 
@@ -207,7 +207,7 @@ describe('Auth and sessions (e2e)', () => {
       await agent.post('/api/v1/auth/refresh').expect(200);
 
       await agent
-        .get('/api/v1/tasks')
+        .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
     });
@@ -259,7 +259,7 @@ describe('Auth and sessions (e2e)', () => {
 
       // And so is the access token, which proves the guard sees the revocation.
       const denied = await request(server)
-        .get('/api/v1/tasks')
+        .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(401);
       expect(errorMessage(denied)).toBe('Session is no longer active');
@@ -350,7 +350,7 @@ describe('Auth and sessions (e2e)', () => {
       expect(refreshCookieValue(setCookieHeader(res), cookieName)).toBeNull();
 
       await request(server)
-        .get('/api/v1/tasks')
+        .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(401);
     });
@@ -374,7 +374,7 @@ describe('Auth and sessions (e2e)', () => {
         .expect(204);
 
       await request(server)
-        .get('/api/v1/tasks')
+        .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${authBody(b).accessToken}`)
         .expect(401);
       await agentB.post('/api/v1/auth/refresh').expect(401);

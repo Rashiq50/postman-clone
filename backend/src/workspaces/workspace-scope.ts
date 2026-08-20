@@ -4,10 +4,10 @@ import { WorkspaceRole } from '@postman-clone/contracts';
  * Authorization, as SQL fragments rather than a guard.
  *
  * **The rule: membership travels inside the statement that reads or writes.**
- * This is `TasksService`'s pattern lifted one level — instead of
- * `WHERE "ownerId" = :ownerId` it is `WHERE "collectionId" IN (<collections I
- * can write to>)`. A row belonging to someone else is never materialized, and
- * there is no interval between checking and acting.
+ * Instead of a single-owner `WHERE "ownerId" = :ownerId` it is
+ * `WHERE "collectionId" IN (<collections I can write to>)`. A row belonging to
+ * someone else is never materialized, and there is no interval between
+ * checking and acting.
  *
  * A `@WorkspaceMember(EDITOR)` guard was the obvious alternative and is wrong
  * in four separate ways, none of them stylistic:

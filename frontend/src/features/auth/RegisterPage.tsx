@@ -93,8 +93,7 @@ const RegisterPage = () => {
   const serverFields = fieldErrors(error);
   const clientProblems = validate(values);
   // Defaults to "/", the workbench, which `WorkspaceRedirect` resolves to
-  // the user's workspace. Not "/tasks" — that page is the original
-  // scaffolding and goes away with the execution slice.
+  // the user's workspace.
   const from = (location.state as { from?: string } | null)?.from ?? "/";
 
   // 409 EMAIL_TAKEN carries no `details`, so it is attached to the field it is

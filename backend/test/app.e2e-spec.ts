@@ -40,7 +40,7 @@ describe('Health and default protection (e2e)', () => {
   // two assertions fail if someone removes it, and the health tests fail if
   // someone forgets the marker on a route that probes must reach.
   it('rejects an unauthenticated request to a normal route', () => {
-    return request(app.getHttpServer()).get('/api/v1/tasks').expect(401);
+    return request(app.getHttpServer()).get('/api/v1/workspaces').expect(401);
   });
 
   it('leaves login reachable without a token', () => {

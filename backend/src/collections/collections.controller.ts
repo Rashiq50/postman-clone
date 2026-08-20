@@ -19,9 +19,9 @@ import { MoveCollectionDto } from './dto/move-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
 
 /**
- * Flat and top-level, with the parent id in the `POST` body — matching
- * `TasksController` and every other resource here. One consistent rule, and a
- * collection's URL does not change when it is reordered.
+ * Flat and top-level, with the parent id in the `POST` body — matching every
+ * other resource here. One consistent rule, and a collection's URL does not
+ * change when it is reordered.
  *
  * There is no `GET`: collections are read through `GET /workspaces/:id/tree`,
  * which is the only thing that ever needs them.

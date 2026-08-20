@@ -1,5 +1,10 @@
 # Domain model + the collections/requests tree (slice 1)
 
+> **Historical.** This is the plan as written before the slice was built, kept as a
+> record and deliberately not rewritten. The `tasks` module it refers to throughout has
+> since been deleted, so every `TasksService` / `TasksController` / `/tasks` reference below
+> is dangling. See *Current state* in [CLAUDE.md](CLAUDE.md) for what is actually there.
+
 ## Context
 
 The repo is called `postman-clone` but there is no Postman domain in it. Today the only

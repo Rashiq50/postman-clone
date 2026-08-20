@@ -101,7 +101,7 @@ describe('Session cap (e2e)', () => {
     // At a cap of 10 a real user effectively never sees this; credential
     // stuffing does.
     const denied = await request(server)
-      .get('/api/v1/tasks')
+      .get('/api/v1/workspaces')
       .set('Authorization', `Bearer ${first}`)
       .expect(401);
     expect((denied.body as { error: { message: string } }).error.message).toBe(
@@ -163,7 +163,7 @@ describe('Session cap (e2e)', () => {
     // The oldest-created session survives, because it is the most recently
     // *active*. Under a bare `ORDER BY "lastUsedAt"` it would have been evicted.
     await request(server)
-      .get('/api/v1/tasks')
+      .get('/api/v1/workspaces')
       .set('Authorization', `Bearer ${oldButActive}`)
       .expect(200);
   });

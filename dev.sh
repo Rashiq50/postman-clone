@@ -27,7 +27,7 @@ port_of() { case "$1" in backend) echo "3000"     ;; frontend) echo "5173"     ;
 cmd_of()  { case "$1" in backend) echo "start:dev";; frontend) echo "dev"      ;; esac; }
 url_of()  {
   case "$1" in
-    backend)  echo "http://localhost:3000/api/v1/tasks" ;;
+    backend)  echo "http://localhost:3000/api/v1/health" ;;
     frontend) echo "http://localhost:5173"           ;;
   esac
 }

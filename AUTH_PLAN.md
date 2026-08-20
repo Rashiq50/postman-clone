@@ -1,5 +1,10 @@
 # Complete the authentication system (backend + frontend)
 
+> **Historical.** This is the plan as written before the slice was built, kept as a
+> record and deliberately not rewritten. The `tasks` module it refers to throughout has
+> since been deleted, so every `TasksService` / `TasksController` / `/tasks` reference below
+> is dangling. See *Current state* in [CLAUDE.md](CLAUDE.md) for what is actually there.
+
 ## Context
 
 **This section describes the starting point, not the current state — all of it has since been

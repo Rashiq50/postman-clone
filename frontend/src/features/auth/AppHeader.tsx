@@ -36,9 +36,6 @@ export function AppHeader({ wide = false }: { wide?: boolean }) {
           <NavLink to="/" end className={linkClass}>
             Workspace
           </NavLink>
-          <NavLink to="/tasks" className={linkClass}>
-            Tasks
-          </NavLink>
           <NavLink to="/sessions" className={linkClass}>
             Sessions
           </NavLink>

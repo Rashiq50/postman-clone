@@ -13,7 +13,7 @@ import { configureApp } from '../src/configure-app';
  * Unlike `auth.e2e-spec.ts`, these tests create *users*, so the cleanup has to
  * delete rows this suite invented rather than just the seed user's sessions.
  * Every address it registers carries the `EMAIL_PREFIX` marker and `afterAll`
- * removes them by that prefix — sessions, refresh tokens and tasks follow via
+ * removes them by that prefix — sessions, refresh tokens and workspaces follow
  * `ON DELETE CASCADE`. Deleting by prefix rather than by a collected list also
  * cleans up after a run that was killed halfway through.
  */
@@ -183,7 +183,7 @@ describe('Registration (e2e)', () => {
       }).expect(201);
 
       await agent
-        .get('/api/v1/tasks')
+        .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${authBody(res).accessToken}`)
         .expect(200);
     });
@@ -373,7 +373,7 @@ describe('Registration (e2e)', () => {
       // The guard checks the session on every request, so revocation is
       // immediate rather than waiting for the old token to expire.
       await agent
-        .get('/api/v1/tasks')
+        .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${authBody(first).accessToken}`)
         .expect(401);
     });
@@ -400,7 +400,7 @@ describe('Registration (e2e)', () => {
       }).expect(409);
 
       await agent
-        .get('/api/v1/tasks')
+        .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${authBody(first).accessToken}`)
         .expect(200);
     });

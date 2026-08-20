@@ -27,7 +27,7 @@ cp backend/.env.example backend/.env   # then set DB_PASSWORD
 
 ```
 SERVICE    STATUS     PID      PORT   URL                                   UPTIME
-backend    running    25636    3000   http://localhost:3000/api/v1/tasks    5s
+backend    running    25636    3000   http://localhost:3000/api/v1/health   5s
 frontend   running    6344     5173   http://localhost:5173                 2s
 ```
 
@@ -46,10 +46,10 @@ actually listening on the port, not a pidfile, and stopping kills the whole proc
 
 ## The shared contracts package
 
-`packages/contracts` holds the wire format: `Task`, `TaskStatus`, the pagination envelope,
-the API prefix and version. Both sides import it, so the shape cannot drift silently —
-`TaskResponseDto implements Task` on the backend, which means **a mismatch fails the build**
-rather than surfacing as a runtime bug in the browser.
+`packages/contracts` holds the wire format: `ApiRequest`, `Workspace`, `HttpMethod`, the
+pagination envelope, the API prefix and version. Both sides import it, so the shape cannot
+drift silently — `RequestResponseDto implements ApiRequest` on the backend, which means **a
+mismatch fails the build** rather than surfacing as a runtime bug in the browser.
 
 It is built and **copied** into each app's `node_modules`, not symlinked:
 
@@ -131,11 +131,6 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 | `POST` | `/api/v1/environments` | `{ workspaceId, name, variables? }` | `Environment` (201) |
 | `PATCH` | `/api/v1/environments/:id` | partial | `Environment` |
 | `DELETE` | `/api/v1/environments/:id` | — | 204 |
-| `GET` | `/api/v1/tasks?page=1&limit=20` | — | `Paginated<Task>` |
-| `POST` | `/api/v1/tasks` | `{ title, description?, status? }` | `Task` (201) |
-| `GET` | `/api/v1/tasks/:id` | — | `Task` |
-| `PATCH` | `/api/v1/tasks/:id` | partial | `Task` |
-| `DELETE` | `/api/v1/tasks/:id` | — | 204 |
 | `GET` | `/api/v1/health` | — | `{ status: "ok" }` |
 | `GET` | `/api/v1/ready` | — | `{ status, checks }` (503 if DB down) |
 
@@ -169,10 +164,10 @@ editor fetches the full row from `GET /requests/:id`.
 
 Wire Kubernetes (or similar) liveness to `/health` and readiness to `/ready`.
 
-**Controllers never return entities.** They return `TaskResponseDto`, built with
-class-transformer's `excludeExtraneousValues`, so only `@Expose()`d fields reach the wire.
-A column added to the entity tomorrow — a password hash, an internal flag, a soft-delete
-timestamp — is dropped by default instead of leaking. Keep it that way.
+**Controllers never return entities.** They return a DTO such as `RequestResponseDto`,
+built with class-transformer's `excludeExtraneousValues`, so only `@Expose()`d fields
+reach the wire. A column added to the entity tomorrow — a password hash, an internal flag,
+a soft-delete timestamp — is dropped by default instead of leaking. Keep it that way.
 
 Request bodies go through a global `ValidationPipe` with `whitelist` and
 `forbidNonWhitelisted`, so unknown fields are rejected with a 400 rather than silently
@@ -189,17 +184,17 @@ first for exactly that reason — retrofitting `workspaceId` onto a populated
 `collections`/`requests` set would have been the expensive direction.
 
 **Authorization travels inside the statement that reads or writes. There is no
-authorization guard, and adding one would be a regression.** This is `TasksService`'s
-pattern one level up: instead of `WHERE "ownerId" = :ownerId` it is
+authorization guard, and adding one would be a regression.** Instead of a single-owner
+`WHERE "ownerId" = :ownerId` it is
 `WHERE "collectionId" IN (<collections I can write to>)`. See
 `backend/src/workspaces/workspace-scope.ts` for the fragments and the four concrete
 failure modes a guard has — the sharpest being that on `POST /requests` the parent id is
 in the **body**, where a route-param guard cannot see it at all, so such a guard passes
 every hand test while leaving a full cross-tenant write unauthorized.
 
-- **Not a member → 404**, matching `TasksService.findOne`: a 403 confirms the id is real
-  and enables enumeration. **A member whose role is too low → 403**, which leaks nothing
-  because they can already read the row.
+- **Not a member → 404**: a 403 confirms the id is real and enables enumeration.
+  **A member whose role is too low → 403**, which leaks nothing because they can already
+  read the row.
 - Roles are `OWNER`/`ADMIN`/`EDITOR`/`VIEWER`, stored as `varchar` + a `CHECK` rather than
   a Postgres enum, because role sets churn and a `CHECK` is one statement to change. Role
   checks live nowhere but the `roles` array bound into the scope fragment.
@@ -244,7 +239,7 @@ Every non-2xx response has one shape, declared in `packages/contracts/src/error.
     ],
     "requestId": "46c92c80-a756-4c1e-9c14-80ed46072c1f",
     "timestamp": "2026-08-13T08:04:17.094Z",
-    "path": "/api/v1/tasks"
+    "path": "/api/v1/requests"
   }
 }
 ```
@@ -317,7 +312,7 @@ typing the same thing.
 **Two token types, two lifetimes.** A short-lived JWT access token goes in the response body
 and is sent as `Authorization: Bearer …`. The long-lived refresh token never appears in a
 response body at all — it travels only in an httpOnly cookie scoped to `Path=/api/v1/auth`, so
-no script on the page can read it and it is never attached to `/api/v1/tasks`.
+no script on the page can read it and it is never attached to the resource routes.
 
 **A session is a device; a refresh token is one rotation step.** `sessions` holds one row per
 login, with a stable id that access tokens carry as `sid`. `refresh_tokens` holds one row per
@@ -374,7 +369,7 @@ long and tight locks out an office behind one NAT. Rejected bodies count too, wh
 an address-enumeration run never sends a body that succeeds.
 
 The guard is applied with `@UseGuards` on the one route that needs it, never as an `APP_GUARD` —
-a global throttler would put every task endpoint on a shared IP budget. It also runs *before*
+a global throttler would put every API endpoint on a shared IP budget. It also runs *before*
 `OriginCheckGuard`, so a flood is bounded whatever it claims to be, and it is the only thing
 between an unauthenticated caller and an unbounded number of deliberately-expensive Argon2 hashes.
 
@@ -407,7 +402,7 @@ Server state lives in RTK Query. There is **one** API slice — `baseApi` in
 `src/app/baseApi.ts` — and features add endpoints with `injectEndpoints`
 rather than calling `createApi` again. One cache, one middleware, and one place for auth
 headers and 401-refresh. It lives under `src/app/` rather than in a feature folder because
-both `features/auth` and `features/tasks` depend on it. Use plain slices in
+both `features/auth` and `features/requests` depend on it. Use plain slices in
 `src/app/store.ts` for local UI state.
 
 Routing is `react-router` v7, used as a router only — no `loader`/`action`/`fetcher`, since
@@ -428,9 +423,7 @@ it gives deep links, a working Back button and two tabs on two workspaces for fr
 lone thing this app does put in storage is the theme preference, which is a display setting
 rather than application state — see *Theming* below.)
 
-`/tasks` and `/sessions` keep the old centred shell. **`/tasks` is the original scaffolding
-and goes away when the execution slice lands** — saying so now is what stops it quietly
-becoming permanent.
+`/sessions` keeps the centred shell; everything else lives in the workbench.
 
 ### Theming
 

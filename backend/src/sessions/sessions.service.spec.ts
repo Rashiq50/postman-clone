@@ -587,7 +587,7 @@ describe('SessionsService', () => {
     });
 
     // 404, not 403: a 403 confirms the id exists and lets anyone enumerate
-    // session ids across the system. Same reasoning as TasksService.findOne.
+    // session ids across the system.
     it('is not-found, never forbidden, when nothing matched', async () => {
       updateBuilder.execute.mockResolvedValue({ affected: 0 });
 

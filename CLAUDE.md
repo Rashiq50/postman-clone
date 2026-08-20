@@ -44,19 +44,20 @@ symlinks — see README). It runs as a `postinstall` in both apps, but **after e
 `packages/contracts/src` you must run `./dev.sh contracts` yourself** or both sides keep
 compiling against the stale copy.
 
-**Contract drift is a compile error, by design.** `TaskResponseDto implements Task` — if the DTO
-and `packages/contracts/src/task.ts` disagree, the backend build fails instead of the browser
-getting a surprise. Keep that `implements` clause on any new response DTO.
+**Contract drift is a compile error, by design.** `RequestResponseDto implements ApiRequest` —
+if the DTO and `packages/contracts/src/request.ts` disagree, the backend build fails instead of
+the browser getting a surprise. Keep that `implements` clause on any new response DTO.
 
-**`TaskStatus` is a const object, not a TS `enum`** — the frontend compiles with
-`erasableSyntaxOnly`. Never introduce an `enum` into contracts.
+**`HttpMethod` and `WorkspaceRole` are const objects, not TS `enum`s** — the frontend compiles
+with `erasableSyntaxOnly`. Never introduce an `enum` into contracts.
 
 **Every env var must be added to `backend/src/config/env.validation.ts`.** Joi runs with
 `whitelist`, so a variable missing from the schema is invisible to `ConfigService` no matter
 what `.env` says.
 
 **Never return an entity from a controller.** Go through a `@Expose()`-only DTO built with
-`excludeExtraneousValues` (`TaskResponseDto.from`). Lists return `{ data, meta }`, never a bare array.
+`excludeExtraneousValues` (`RequestResponseDto.from`). Lists return `{ data, meta }`, never a
+bare array.
 
 ## Auth architecture
 
@@ -72,8 +73,8 @@ The e2e test asserts this — it fails if the global guard is removed.
   inherits them — don't restate them at a call site.
 - The guard hits the DB on every request (`sessionsService.isActive(sid)`) so revocation is
   immediate. That cost is deliberate.
-- Handlers take the owner id from `@CurrentUser()` only — never a route param or body.
-  `TasksService` scopes every query by `ownerId`.
+- Handlers take the owner id from `@CurrentUser()` only — never a route param or body. Every
+  domain query is scoped by membership in the `WHERE` (see *Domain and tenancy*).
 - Two hashes for two jobs: **Argon2id** for passwords ([common/crypto/password.ts](backend/src/common/crypto/password.ts)),
   **SHA-256** for refresh tokens ([common/crypto/sha256.ts](backend/src/common/crypto/sha256.ts)),
   which are 32 random bytes and need speed, not stretching. Don't merge them.
@@ -166,7 +167,7 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
   nothing while still answering 204. That asymmetry is the single most common bug in this
   feature and the entire justification for the file; `refresh-cookie.spec.ts` pins it.
 - `Path=/api/v1/auth` is built from the API constants, and keeps the long-lived credential off
-  the task routes. It rules out the `__Host-` prefix, which requires `Path=/` — do **not**
+  the resource routes. It rules out the `__Host-` prefix, which requires `Path=/` — do **not**
   "fix" `AUTH_COOKIE_NAME` into a `__Host-` name, or the browser will reject the cookie outright.
 - The refresh token appears **only** in the cookie, never in a response body.
 - `logout` is `@Public()` and reads the cookie: a protected logout 401s exactly when a user most
@@ -180,10 +181,10 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
 
 ## Frontend auth rules
 
-- The single `baseApi` now lives in [app/baseApi.ts](frontend/src/app/baseApi.ts), **not** in
-  `features/tasks/tasksApi.ts` — both `features/auth` and `features/tasks` depend on it. Features
-  extend it via `injectEndpoints`; never call `createApi` a second time.
-- `tagTypes` is `Task`, `Session`, `Me`, `Workspace`, `Tree`, `Request`. There is deliberately
+- The single `baseApi` lives in [app/baseApi.ts](frontend/src/app/baseApi.ts) rather than in any
+  one feature folder — `features/auth`, `features/tree` and `features/requests` all depend on
+  it. Features extend it via `injectEndpoints`; never call `createApi` a second time.
+- `tagTypes` is `Session`, `Me`, `Workspace`, `Tree`, `Request`. There is deliberately
   **no `Collection`, `Folder` or `Environment` tag**: none has a read endpoint, so nothing
   would provide one, and a tag nothing provides makes the cache look covered where it is not.
   Each arrives with the feature that reads it.
@@ -235,9 +236,10 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   there is no row to scope and `affected === 0` never arises. Every create instead resolves
   its parent through the scoped query *inside its transaction*, with the foreign key as the
   race backstop, and denies via `explainParentDenial` keyed on the parent the caller named.
-- **404 when not a member** (a 403 would confirm the id is real — verbatim `TasksService`
-  policy); **403 when a member's role is too low** (leaks nothing; they can already read it).
-  Both live in `scope-denial.ts`, and the second query is paid only on the failure path.
+- **404 when not a member** (a 403 would confirm the id is real, which is all an attacker
+  needs to enumerate); **403 when a member's role is too low** (leaks nothing; they can
+  already read it). Both live in `scope-denial.ts`, and the second query is paid only on the
+  failure path.
 - Role checks live nowhere but the `roles` array bound into the fragment. There is no
   `if (role === 'VIEWER') throw` anywhere; adding a role is editing one array. Roles are
   `varchar` + `CHECK`, never a Postgres enum — a `CHECK` is one statement to change.
@@ -264,7 +266,7 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   single-column FK on every run. **That diff is expected and must be discarded** — it is the
   *only* drift these tables produce, because every other constraint, index and default is
   declared on the entities precisely so this one stays easy to recognise. (The repo has
-  separate pre-existing drift on `tasks`/`sessions` FK names.)
+  separate pre-existing drift on the `sessions` FK names.)
 - **`FK_requests_folder` relies on `MATCH SIMPLE`**, the Postgres default: with `folderId`
   NULL the constraint is not checked at all, which is exactly how a request sits at the
   collection root. `MATCH FULL` would forbid every root-level request.
@@ -288,7 +290,7 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
 
 ## Frontend workbench rules
 
-- Two shells: `AppShell` (centred `max-w-3xl`, used by `/tasks` and `/sessions`) and
+- Two shells: `AppShell` (centred `max-w-3xl`, used by `/sessions`) and
   `WorkbenchShell` (`h-screen overflow-hidden`, fixed sidebar, independently scrolling panes).
   `AppHeader` takes one `wide` prop. ⚠️ `min-h-0` on the workbench grid and `<main>` is
   load-bearing — a grid child defaults to `min-height: auto`, so without it the panes size to
@@ -330,7 +332,7 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
 - No icon library and no editor library — text glyphs (`▸ ▾ ⋯`) and a plain `<textarea>` with a
   Format JSON button. Both are dependency decisions belonging to the execution slice.
 - **No Send button, not even a disabled one.** Deliberate; see `RequestUrlBar.tsx`.
-- Login and register default their post-auth `from` to `/`, not `/tasks`.
+- Login and register default their post-auth `from` to `/`, the workbench.
 
 ## Theming
 
@@ -395,6 +397,22 @@ logout-all, `GET /auth/me`, `GET /sessions` and `DELETE /sessions/:id` all exist
 frontend described below is wired to them. `backend/test/auth.e2e-spec.ts` and
 `session-cap.e2e-spec.ts` cover the cycle end to end against a live Postgres.
 
+**The `tasks` module is gone.** It was the preliminary CRUD feature that proved out the global
+guard, the DTO/contract seam and the error envelope, and the domain slice replaced it entirely.
+Removed in one pass: `backend/src/tasks/`, `frontend/src/features/tasks/`,
+`packages/contracts/src/task.ts`, the `Task` tag type, the `/tasks` route and its nav link, and
+the `tasks` relation on `UserEntity`. Migration `1786670000000-DropTasks` drops the table and
+its enum; the earlier migrations that created and extended `tasks` are deliberately left in
+place, so a database migrated from empty still creates the table and then drops it. The e2e
+suites used `GET /api/v1/tasks` as their "some protected route" probe and now use
+`GET /api/v1/workspaces` — if a future slice needs such a probe, that is the one to reach for.
+Nothing in the app references tasks any more. A `grep -i task` over `backend/src`,
+`backend/test`, `frontend/src` and `packages/contracts/src` comes back empty apart from
+`backend/src/database/migrations/`, and a hit anywhere else means something was reintroduced.
+[AUTH_PLAN.md](AUTH_PLAN.md) and [DOMAIN_PLAN.md](DOMAIN_PLAN.md) still describe tasks at
+length; they are historical records of what was planned, deliberately not rewritten, and every
+`TasksService` / `TasksController` reference in them is now dangling.
+
 Registration is complete on both sides too. `POST /auth/register` is covered by a `register`
 block in `auth.service.spec.ts` and by `backend/test/register.e2e-spec.ts` (happy path + cookie +
 protected route, duplicate and case-variant duplicate → 409 `EMAIL_TAKEN`, the validation matrix,
@@ -403,10 +421,11 @@ the `register` mutation in `authApi` and the `/register` route.
 
 Two things about `register.e2e-spec.ts` are load-bearing. It creates **users**, so its cleanup
 deletes them — by the `e2e-register-` email prefix, which also sweeps up after a run that was
-killed before its `afterAll`; sessions, refresh tokens and tasks follow via `ON DELETE CASCADE`.
-And it reads the cookie name from `ConfigService` rather than hard-coding `pc_refresh_token` the
-way `auth.e2e-spec.ts` does — a local `.env` that renamed `AUTH_COOKIE_NAME` makes that older
-suite report a missing cookie when the cookie is right there.
+killed before its `afterAll`; sessions, refresh tokens and workspaces follow via
+`ON DELETE CASCADE`. And it reads the cookie name from `ConfigService` rather than hard-coding
+`pc_refresh_token` the way `auth.e2e-spec.ts` does — a local `.env` that renamed
+`AUTH_COOKIE_NAME` makes that older suite report a missing cookie when the cookie is right
+there.
 
 `POST /auth/register` is now rate limited. `ApiThrottlerGuard`
 ([common/throttling/api-throttler.guard.ts](backend/src/common/throttling/api-throttler.guard.ts))
@@ -420,7 +439,7 @@ is in `configure-app.ts`'s `exposedHeaders` — a cross-origin browser cannot re
   `buildThrottlerOptions`. One window cannot be both generous enough for a shared NAT and tight
   enough to stop enumeration.
 - Applied with `@UseGuards(ApiThrottlerGuard, OriginCheckGuard)` on `register` only — **never** as
-  an `APP_GUARD`, which would put the task routes on a shared IP budget. Throttler first, so a
+  an `APP_GUARD`, which would put the resource routes on a shared IP budget. Throttler first, so a
   flood is bounded before anything else runs.
 - **Two limits are per-process and per-proxy.** In-memory storage means N instances allow N× the
   rate; `req.ip` is the proxy's address because `trust proxy` is off, which behind a load balancer
@@ -481,7 +500,8 @@ suite fail intermittently and for reasons that have nothing to do with the sessi
   A run in 2026-08 reformatted the whole backend, so `auth/**` and `sessions/**` are no longer the
   4-space, non-Prettier-clean outliers they used to be; the backend is now uniformly 2-space and
   Prettier-formatted. Older docs (including parts of [AUTH_PLAN.md](AUTH_PLAN.md)) still say
-  "4-space" for those files — that instruction is stale. It leaves ~15 errors it cannot auto-fix,
-  mostly `no-unsafe-*` in `tasks/` and the specs; those are pre-existing, so a red `yarn lint` is
-  not necessarily your change. Still: match the file you are editing rather than reformatting it.
+  "4-space" for those files — that instruction is stale. It leaves 5 errors it cannot auto-fix
+  (`no-unsafe-*` and `unbound-method`, mostly in the specs); those are pre-existing, so a red
+  `yarn lint` is not necessarily your change. Still: match the file you are editing rather than
+  reformatting it.
 - The frontend's `yarn lint` is `oxlint`, which only reports. It is clean.

@@ -1,5 +1,4 @@
 import type { SessionEntity } from '../../sessions/entities/session.entity';
-import type { Task } from '../../tasks/entities/task.entity';
 import {
   Column,
   CreateDateColumn,
@@ -31,7 +30,4 @@ export class UserEntity {
 
   @OneToMany('SessionEntity', 'user')
   sessions: SessionEntity[];
-
-  @OneToMany('Task', 'owner')
-  tasks: Task[];
 }

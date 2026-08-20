@@ -20,8 +20,7 @@ export function LoginPage() {
   const fields = fieldErrors(error);
   const apiError = toApiError(error);
   // Defaults to "/", the workbench, which `WorkspaceRedirect` resolves to
-  // the user's workspace. Not "/tasks" — that page is the original
-  // scaffolding and goes away with the execution slice.
+  // the user's workspace.
   const from = (location.state as { from?: string } | null)?.from ?? "/";
 
   /**
@@ -38,7 +37,7 @@ export function LoginPage() {
     event.preventDefault();
 
     // Drop user A's cached data before user B signs in. This belongs here and
-    // not in logout's onQueryStarted: at logout time the task list still has a
+    // not in logout's onQueryStarted: at logout time the workbench still has a
     // live subscriber, so a reset there refetches immediately, 401s, and then
     // refreshes against a cookie the server has just cleared. On /login
     // nothing authenticated is mounted, which is exactly when this matters.

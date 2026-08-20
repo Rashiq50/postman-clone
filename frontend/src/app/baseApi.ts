@@ -146,6 +146,6 @@ export const baseApi = createApi({
   // inside the tree, and nothing consumes environments yet — and a tag nothing
   // provides is dead weight that makes the cache look covered where it is not.
   // Each arrives with the feature that reads it.
-  tagTypes: ["Task", "Session", "Me", "Workspace", "Tree", "Request"],
+  tagTypes: ["Session", "Me", "Workspace", "Tree", "Request"],
   endpoints: () => ({}),
 });

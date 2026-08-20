@@ -5,7 +5,6 @@ import { RequireAuth } from '../features/auth/RequireAuth'
 import { EmptyEditorState } from '../features/requests/EmptyEditorState'
 import { RequestEditor } from '../features/requests/RequestEditor'
 import { SessionsPage } from '../features/sessions/SessionsPage'
-import { TasksPage } from '../features/tasks/TasksPage'
 import { WorkspaceGuard } from '../features/workspaces/WorkspaceGuard'
 import { WorkspaceRedirect } from '../features/workspaces/WorkspaceRedirect'
 import { AppShell } from './AppShell'
@@ -17,8 +16,8 @@ import { WorkbenchShell } from './WorkbenchShell'
  * data stays in RTK Query hooks.
  *
  * Two shells sit inside the one `RequireAuth`: the workbench, whose panes
- * scroll independently, and the original centred `AppShell` that `/tasks` and
- * `/sessions` still use. `/login` and `/register` stay outside it, unchanged.
+ * scroll independently, and the centred `AppShell` that `/sessions` uses.
+ * `/login` and `/register` stay outside it, unchanged.
  *
  * The workspace id is a **route param**, not Redux state — see
  * `WorkspaceRedirect` for why that is a correctness requirement here and not a
@@ -57,14 +56,10 @@ export const router = createBrowserRouter([
       },
       {
         element: <AppShell />,
-        children: [
-          { path: 'tasks', element: <TasksPage /> },
-          { path: 'sessions', element: <SessionsPage /> },
-        ],
+        children: [{ path: 'sessions', element: <SessionsPage /> }],
       },
-      // Up a level from where it used to live, and pointing at `/` rather than
-      // `/tasks`: it now covers two shells, and a mistyped URL should land on
-      // the workspace rather than on the page being deprecated.
+      // Sits above both shells and points at `/`, so a mistyped URL lands on
+      // the workspace rather than on a 404.
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },

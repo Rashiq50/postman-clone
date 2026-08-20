@@ -19,8 +19,8 @@ import type { CookieOptions, Request, Response } from 'express';
 
 /**
  * Scoped to the auth routes rather than `/`, so the long-lived credential is
- * never attached to `/api/v1/tasks`: it stays out of task-endpoint access logs
- * and out of the blast radius of a bug on a hot path.
+ * never attached to the resource routes: it stays out of their access logs and
+ * out of the blast radius of a bug on a hot path.
  *
  * The trade-off is that this rules out the `__Host-` cookie prefix, which
  * requires `Path=/`. Accepted: `__Host-` defends against cookie shadowing from

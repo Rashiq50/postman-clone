@@ -17,9 +17,9 @@ import {
  *
  * The policy, and the reasoning behind each half:
  *
- * - **Not a member → 404.** Verbatim `TasksService.findOne` policy: a 403 here
- *   would confirm the id is real, which is all an attacker needs to enumerate
- *   what exists across the whole system.
+ * - **Not a member → 404.** A 403 here would confirm the id is real, which
+ *   is all an attacker needs to enumerate what exists across the whole
+ *   system.
  * - **A member whose role is too low → 403.** This leaks nothing, because they
  *   can already read the row. A 404 here would tell a VIEWER that their own
  *   request does not exist.

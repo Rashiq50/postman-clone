@@ -84,7 +84,7 @@ describe('refresh cookie', () => {
   });
 
   it('scopes the cookie to the auth routes, built from the API constants', () => {
-    // Keeps the long-lived credential off /api/v1/tasks: out of task-endpoint
+    // Keeps the long-lived credential off the resource routes: out of their
     // access logs and out of the blast radius of a bug on a hot path.
     expect(refreshCookieOptions(configFor()).path).toBe('/api/v1/auth');
   });

@@ -1,8 +1,8 @@
 import type { HttpMethod } from '@postman-clone/contracts'
 
 /**
- * The method badge colours, following the precedent of `TaskItem.tsx`'s
- * text-only status badges. **No icon library**, here or anywhere in this
+ * The method badge colours are text-only, like every other badge in this app.
+ * **No icon library**, here or anywhere in this
  * feature — the glyphs are plain text (`▸ ▾ ⋯`) and the badge is the method
  * name itself. Adding a dependency for six triangles is not a trade worth
  * making, and it would be the kind of decision that is hard to reverse.

@@ -7,7 +7,6 @@ import {
   envValidationSchema,
 } from './config/env.validation';
 import { HealthModule } from './health/health.module';
-import { TasksModule } from './tasks/tasks.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SessionsModule } from './sessions/sessions.module';
@@ -37,7 +36,6 @@ import { EnvironmentsModule } from './environments/environments.module';
       }),
     }),
     HealthModule,
-    TasksModule,
     AuthModule,
     UsersModule,
     SessionsModule,

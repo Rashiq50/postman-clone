@@ -2,7 +2,7 @@
   "name": "postman-clone",
   "version": "0.0.0",
   "private": true,
-  "description": "Task runner for the workspace. See ./dev.sh for the dev stack.",
+  "description": "Dev-stack runner for the workspace. See ./dev.sh.",
   "scripts": {
     "setup": "./dev.sh install",
     "dev": "./dev.sh",

@@ -27,7 +27,7 @@ import { buildThrottlerOptions } from '../common/throttling/throttler.config';
     /**
      * Rate limiting, configured here and applied with `@UseGuards` on the one
      * route that needs it — not as a global `APP_GUARD`. A global throttler
-     * would put every task endpoint on a shared IP budget, which behind a
+     * would put every API endpoint on a shared IP budget, which behind a
      * proxy (see `ApiThrottlerGuard.getTracker`) is one bucket for the whole
      * user base.
      *

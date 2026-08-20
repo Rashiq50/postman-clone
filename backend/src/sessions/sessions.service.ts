@@ -401,8 +401,7 @@ export class SessionsService {
    * between checking and acting.
    *
    * `affected === 0` is a `NotFoundException`, never a 403: a 403 would confirm
-   * the id exists and let anyone enumerate session ids across the system. Same
-   * reasoning as `TasksService.findOne`.
+   * the id exists and let anyone enumerate session ids across the system.
    */
   async revokeOwned(userId: string, sessionId: string): Promise<void> {
     const result = await this.sessionsRepository

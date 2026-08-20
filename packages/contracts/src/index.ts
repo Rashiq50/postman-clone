@@ -6,6 +6,5 @@ export * from './error';
 export * from './pagination';
 export * from './password';
 export * from './request';
-export * from './task';
 export * from './tree';
 export * from './workspace';
