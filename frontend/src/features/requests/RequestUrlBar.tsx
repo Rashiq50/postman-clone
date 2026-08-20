@@ -31,12 +31,19 @@ export function RequestUrlBar({
   return (
     <div className="flex items-center gap-2">
       {/* The method keeps its colour in the trigger *and* in the list — the
-          one place a coloured `<option>` would have been ignored outright. */}
+          one place a coloured `<option>` would have been ignored outright.
+
+          ⚠️ The trigger is a **fixed** width (`w-24`, sized to the longest
+          method, `OPTIONS`) rather than content-sized. A content-sized trigger
+          resizes on every method change, which shifts the URL field sideways
+          under the caret. `shrink-0` stops the flex row taking it back on a
+          narrow pane, and `justify-between` pins the ▾ to the right edge now
+          that there is slack. */}
       <Select
         label="HTTP method"
         value={method}
         onValueChange={(next) => onMethodChange(next as HttpMethod)}
-        triggerClassName={`py-2 font-mono text-xs font-semibold ${methodStyles[method]}`}
+        triggerClassName={`w-24 shrink-0 justify-between py-2 font-mono text-xs font-semibold ${methodStyles[method]}`}
         entries={HTTP_METHODS.map((m) => ({
           value: m,
           label: m,

@@ -3,7 +3,6 @@ import { memo } from 'react'
 import { FolderNodeView } from './FolderNodeView'
 import { InlineRename } from './InlineRename'
 import { NodeMenu } from './NodeMenu'
-import { CollectionIcon } from './NodeIcon'
 import { Chevron, NodeRow } from './NodeRow'
 import { RequestNodeView } from './RequestNodeView'
 import type { TreeHandlers } from './treeHandlers'
@@ -56,7 +55,6 @@ export const CollectionNodeView = memo(function CollectionNodeView({
             label={node.name}
           />
         }
-        icon={<CollectionIcon />}
         menu={
           <NodeMenu
             getItems={() =>
@@ -99,7 +97,7 @@ export const CollectionNodeView = memo(function CollectionNodeView({
             />
           ))}
           {node.folders.length === 0 && node.requests.length === 0 && (
-            <p className="py-1 pl-[36px] text-xs text-fg-faint">Empty</p>
+            <p className="py-1 pl-[40px] text-xs text-fg-faint">Empty</p>
           )}
         </>
       )}

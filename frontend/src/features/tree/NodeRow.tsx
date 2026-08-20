@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ChevronIcon } from './NodeIcon'
 
 /** The row chrome every node shares: chevron, icon, label, kebab. */
 export function NodeRow({
@@ -44,7 +45,15 @@ export function NodeRow({
   )
 }
 
-/** The expand/collapse triangle. The glyph is decorative; the state is not. */
+/**
+ * The expand/collapse arrow. The icon is decorative; the state is not — it is
+ * on `aria-expanded`, so the SVG stays `aria-hidden`.
+ *
+ * ⚠️ The button's width is shared with `RequestNodeView`'s spacer: a request
+ * has no children and renders an empty box of the same width so its label
+ * lines up with its sibling folders'. Changing `w-5` here means changing it
+ * there in the same edit, or every request row shifts out of the gutter.
+ */
 export function Chevron({
   expanded,
   onToggle,
@@ -60,9 +69,9 @@ export function Chevron({
       aria-expanded={expanded}
       aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label}`}
       onClick={onToggle}
-      className="w-4 shrink-0 text-xs text-fg-faint hover:text-fg-muted"
+      className="flex w-5 shrink-0 items-center justify-center text-fg-faint hover:text-fg-muted"
     >
-      <span aria-hidden>{expanded ? '▾' : '▸'}</span>
+      <ChevronIcon expanded={expanded} />
     </button>
   )
 }

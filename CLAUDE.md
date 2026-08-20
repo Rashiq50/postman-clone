@@ -462,14 +462,24 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
     The native controls they replaced were keyboard- and screen-reader-correct for free; that
     correctness now rests on Radix rather than on the browser. Nothing else may be added on the strength of "we already have Radix" — each package
     is its own decision.
-- No icon library and no editor library — text glyphs (`▸ ▾ ⋯`) and a plain `<textarea>` with a
-  Format JSON button. Both are dependency decisions belonging to the execution slice. The two
-  node icons in [NodeIcon.tsx](frontend/src/features/tree/NodeIcon.tsx) are hand-written inline
-  SVG for the same reason, drawn in `currentColor` only — a baked-in hex would be the one thing
-  on the page that ignores the theme. A collection is an archive box and a folder is a folder
-  (open when expanded); a request has no icon, its method label being its marker already.
-  ⚠️ The icon renders **inside** `NodeRow`'s label button, which is therefore a flex row: the
-  label needs its own `truncate` span now, since `truncate` on the button no longer reaches it.
+- No icon library and no editor library — a text glyph for the kebab (`⋯`) and a plain
+  `<textarea>` with a Format JSON button. Both are dependency decisions belonging to the
+  execution slice. The glyphs in [NodeIcon.tsx](frontend/src/features/tree/NodeIcon.tsx) are
+  hand-written inline SVG for the same reason, drawn in `currentColor` only — a baked-in hex
+  would be the one thing on the page that ignores the theme.
+  - **A folder is a folder** (open when expanded). **A collection has no icon**: an archive box
+    lived there once and was removed — depth 0 already identifies a collection, and a second
+    container glyph beside the folders' only crowded the gutter. A request has none either, its
+    method label being its marker.
+  - **The chevron is `ChevronIcon`, one outline path rotated 90° by CSS**, not the `▸`/`▾` text
+    glyphs it replaced: at `text-xs` those rendered ~8px of ink, too small to read as a control,
+    and two swapped glyphs cannot animate. ⚠️ Its button is `w-5` and `RequestNodeView` renders
+    an empty `w-5` spacer in the same slot — a request has no children but its label must line
+    up with its sibling folders'. Those two widths change together, plus the `pl-[40px]` on the
+    collection view's "Empty" line.
+  - ⚠️ The folder icon renders **inside** `NodeRow`'s label button, which is therefore a flex
+    row: the label needs its own `truncate` span, since `truncate` on the button no longer
+    reaches it.
 - **No Send button, not even a disabled one.** Deliberate; see `RequestUrlBar.tsx`.
 - Login and register default their post-auth `from` to `/`, the workbench.
 

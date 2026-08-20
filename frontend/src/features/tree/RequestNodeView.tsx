@@ -50,7 +50,7 @@ export const RequestNodeView = memo(function RequestNodeView({
       // A request has no children, so it gets the chevron's width as spacing
       // rather than a control — otherwise its label would not line up with its
       // sibling folders'.
-      chevron={<span className="w-4 shrink-0" aria-hidden />}
+      chevron={<span className="w-5 shrink-0" aria-hidden />}
       menu={
         <NodeMenu
           getItems={() =>
