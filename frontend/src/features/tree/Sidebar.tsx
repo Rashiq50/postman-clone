@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { PromptDialog } from '../../components/ui/PromptDialog'
 import { errorMessage } from '../../lib/api-error'
 import {
   useCreateCollectionMutation,
@@ -28,10 +30,37 @@ import type { MenuContext, NodeKind, TreeHandlers } from './treeHandlers'
 import { useGetTreeQuery } from './treeApi'
 import { useTreeUiStore } from './treeUi'
 
+/**
+ * ⚠️ The prompt and confirm state hold **callbacks**, which is what lets the
+ * memoized `handlers` object keep working: `setPrompt`/`setConfirm` are stable
+ * `useState` setters, so nothing new enters the memo's dependency array and no
+ * row re-renders. The alternative — a discriminated union of every action, and
+ * a switch to run it on confirm — would put the action's arguments in state and
+ * split each operation across two places.
+ */
+interface PromptState {
+  title: string
+  label: string
+  initialValue: string
+  confirmLabel: string
+  onSubmit: (value: string) => void
+}
+
+interface ConfirmState {
+  title: string
+  message: string
+  confirmLabel: string
+  danger?: boolean
+  onConfirm: () => void
+}
+
 interface MoveDialogState {
   kind: 'folder' | 'request'
   node: { id: string; name: string }
   currentParentId: string | null
+  /** Needed as well as the parent id: a collection root's id is `null`, so the
+   *  two together are what identify where the node sits today. */
+  currentCollectionId: string
   excludeSubtreeOf?: string
 }
 
@@ -61,6 +90,8 @@ export function Sidebar() {
 
   const ui = useTreeUiStore(workspaceId)
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null)
+  const [prompt, setPrompt] = useState<PromptState | null>(null)
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null)
 
   const [createCollection] = useCreateCollectionMutation()
   const [updateCollection] = useUpdateCollectionMutation()
@@ -159,31 +190,43 @@ export function Sidebar() {
       if (kind !== 'request') {
         items.push({
           label: 'New folder',
-          onSelect: () => {
-            const name = window.prompt('Folder name', 'New folder')?.trim()
-            if (!name) return
-            void createFolder({
-              workspaceId: ws!,
-              collectionId: context.collectionId,
-              parentFolderId: kind === 'folder' ? node.id : null,
-              name,
-            })
-            ui.expandAll([node.id])
-          },
+          onSelect: () =>
+            setPrompt({
+              title: 'New folder',
+              label: 'Folder name',
+              initialValue: 'New folder',
+              confirmLabel: 'Create',
+              onSubmit: (name) => {
+                void createFolder({
+                  workspaceId: ws!,
+                  collectionId: context.collectionId,
+                  parentFolderId: kind === 'folder' ? node.id : null,
+                  name,
+                })
+                // Expand the parent so the new child is visible when the
+                // response patches it in, rather than hidden in a closed node.
+                ui.expandAll([node.id])
+              },
+            }),
         })
         items.push({
           label: 'New request',
-          onSelect: () => {
-            const name = window.prompt('Request name', 'New request')?.trim()
-            if (!name) return
-            void createRequest({
-              workspaceId: ws!,
-              collectionId: context.collectionId,
-              folderId: kind === 'folder' ? node.id : null,
-              name,
-            })
-            ui.expandAll([node.id])
-          },
+          onSelect: () =>
+            setPrompt({
+              title: 'New request',
+              label: 'Request name',
+              initialValue: 'New request',
+              confirmLabel: 'Create',
+              onSubmit: (name) => {
+                void createRequest({
+                  workspaceId: ws!,
+                  collectionId: context.collectionId,
+                  folderId: kind === 'folder' ? node.id : null,
+                  name,
+                })
+                ui.expandAll([node.id])
+              },
+            }),
         })
       }
 
@@ -202,6 +245,7 @@ export function Sidebar() {
               kind,
               node,
               currentParentId: context.parentId,
+              currentCollectionId: context.collectionId,
               excludeSubtreeOf: kind === 'folder' ? node.id : undefined,
             }),
         })
@@ -210,29 +254,41 @@ export function Sidebar() {
       items.push({
         label: 'Delete',
         danger: true,
-        onSelect: () => {
-          // `window.confirm` for now, and saying so plainly: a real dialog with
-          // focus management is deferred, not forgotten.
-          if (!window.confirm(`Delete “${node.name}”? This cannot be undone.`)) {
-            return
-          }
-          // Read *before* the mutation: its optimistic patch removes the
-          // subtree from the cache, so asking afterwards always answers "no".
-          const orphansOpenRequest =
-            latest.current.requestId !== undefined &&
-            subtreeContains(latest.current.tree, node.id, latest.current.requestId)
+        onSelect: () =>
+          setConfirm({
+            title: `Delete “${node.name}”?`,
+            message:
+              kind === 'request'
+                ? 'This cannot be undone.'
+                : 'Everything inside it is deleted too. This cannot be undone.',
+            confirmLabel: 'Delete',
+            danger: true,
+            onConfirm: () => {
+              // Read *before* the mutation: its optimistic patch removes the
+              // subtree from the cache, so asking afterwards always answers
+              // "no". ⚠️ It must also be read here rather than when the menu
+              // item was chosen — the tree can change while the dialog is open.
+              const orphansOpenRequest =
+                latest.current.requestId !== undefined &&
+                subtreeContains(
+                  latest.current.tree,
+                  node.id,
+                  latest.current.requestId,
+                )
 
-          if (kind === 'collection') {
-            void deleteCollection({ id: node.id, workspaceId: ws! })
-          } else if (kind === 'folder') {
-            void deleteFolder({ id: node.id, workspaceId: ws! })
-          } else {
-            void deleteRequest({ id: node.id, workspaceId: ws! })
-          }
-          // If the open request just went away — directly or with its parent —
-          // fall back to the empty state rather than leaving a stale pane.
-          if (orphansOpenRequest) void navigate(`/w/${ws}`, { replace: true })
-        },
+              if (kind === 'collection') {
+                void deleteCollection({ id: node.id, workspaceId: ws! })
+              } else if (kind === 'folder') {
+                void deleteFolder({ id: node.id, workspaceId: ws! })
+              } else {
+                void deleteRequest({ id: node.id, workspaceId: ws! })
+              }
+              // If the open request just went away — directly or with its
+              // parent — fall back to the empty state rather than leaving a
+              // stale pane.
+              if (orphansOpenRequest) void navigate(`/w/${ws}`, { replace: true })
+            },
+          }),
       })
 
       return items
@@ -290,10 +346,15 @@ export function Sidebar() {
         </h2>
         <button
           type="button"
-          onClick={() => {
-            const name = window.prompt('Collection name', 'New collection')?.trim()
-            if (name) void createCollection({ workspaceId: ws, name })
-          }}
+          onClick={() =>
+            setPrompt({
+              title: 'New collection',
+              label: 'Collection name',
+              initialValue: 'New collection',
+              confirmLabel: 'Create',
+              onSubmit: (name) => void createCollection({ workspaceId: ws, name }),
+            })
+          }
           className="rounded px-1.5 text-lg leading-none text-fg-faint hover:bg-surface-muted hover:text-fg-muted"
           aria-label="New collection"
         >
@@ -328,11 +389,34 @@ export function Sidebar() {
         ))}
       </div>
 
+      {prompt && (
+        <PromptDialog
+          title={prompt.title}
+          label={prompt.label}
+          initialValue={prompt.initialValue}
+          confirmLabel={prompt.confirmLabel}
+          onSubmit={prompt.onSubmit}
+          onClose={() => setPrompt(null)}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          danger={confirm.danger}
+          onConfirm={confirm.onConfirm}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+
       {moveDialog && tree && (
         <MoveToDialog
           title={`Move “${moveDialog.node.name}” to…`}
           targets={moveTargets(tree.collections, moveDialog.excludeSubtreeOf)}
           currentParentId={moveDialog.currentParentId}
+          currentCollectionId={moveDialog.currentCollectionId}
           onMove={onMoveConfirmed}
           onClose={() => setMoveDialog(null)}
         />

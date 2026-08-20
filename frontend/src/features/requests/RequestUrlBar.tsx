@@ -1,4 +1,5 @@
 import { HTTP_METHODS, type HttpMethod } from '@postman-clone/contracts'
+import { Select } from '../../components/ui/Select'
 import { methodStyles } from '../tree/methodStyles'
 
 /**
@@ -29,18 +30,19 @@ export function RequestUrlBar({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <select
+      {/* The method keeps its colour in the trigger *and* in the list — the
+          one place a coloured `<option>` would have been ignored outright. */}
+      <Select
+        label="HTTP method"
         value={method}
-        aria-label="HTTP method"
-        onChange={(e) => onMethodChange(e.target.value as HttpMethod)}
-        className={`rounded-md border border-line-strong bg-surface px-2 py-2 font-mono text-xs font-semibold outline-none focus:border-accent ${methodStyles[method]}`}
-      >
-        {HTTP_METHODS.map((m) => (
-          <option key={m} value={m}>
-            {m}
-          </option>
-        ))}
-      </select>
+        onValueChange={(next) => onMethodChange(next as HttpMethod)}
+        triggerClassName={`py-2 font-mono text-xs font-semibold ${methodStyles[method]}`}
+        entries={HTTP_METHODS.map((m) => ({
+          value: m,
+          label: m,
+          className: `font-mono text-xs font-semibold ${methodStyles[m]}`,
+        }))}
+      />
 
       <input
         value={url}

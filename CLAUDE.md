@@ -386,6 +386,82 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   menu at most one row has open, and it dragged the whole tree into each row's memo equation.
   Reorder gets the node's current parent from `MenuContext.parentId` (i.e. from the node itself)
   rather than by walking the tree for it.
+- **Radix is the one UI dependency, and only for behaviour.** `@radix-ui/react-dialog`,
+  `@radix-ui/react-tabs` and `@radix-ui/react-select` — unstyled primitives that ship a focus
+  trap, Escape and outside-press handling, scroll lock, focus restore, roving arrow-key focus,
+  listbox typeahead, popper collision flipping and the ARIA wiring. ⚠️ **They
+  ship no colours, and that is the entire reason they are allowed**: every pixel is still a
+  semantic token, so `yarn contrast` still audits these surfaces and a fifth theme is still one
+  CSS block. **A styled kit (MUI, Ant) is the thing to reject in review** — it brings a second
+  theming engine (emotion palette, cssinjs tokens) whose components sit outside the CSS that
+  `check-contrast.mjs` parses, which turns "unchecked" into "unchecked and invisible".
+  - Modal styling lives in **one** file, [Dialog.tsx](frontend/src/components/ui/Dialog.tsx), not
+    at the call sites — that is what keeps "we use Radix" from meaning "every dialog picks its
+    own padding and overlay", and it is the seam that makes replacing the primitive one edit.
+  - ⚠️ **No `window.prompt` or `window.confirm` anywhere.** Both are
+    [PromptDialog](frontend/src/components/ui/PromptDialog.tsx) and
+    [ConfirmDialog](frontend/src/components/ui/ConfirmDialog.tsx) now — the sidebar's three
+    creates and its delete, the request editor's unsaved-changes guard, and revoking your own
+    session. The reason is not that the native ones are ugly: they **block the main thread**, so
+    an optimistic patch that has already been dispatched cannot paint until the user answers, and
+    a user who ticks Chrome's "prevent this page from creating additional dialogs" gets a `null`
+    or `false` for ever after — New folder and Delete then silently do nothing, with no error
+    anywhere. A `grep` for either in `frontend/src` should only ever hit those two files' prose.
+  - ⚠️ **`ConfirmDialog` calls `onConfirm` before `onClose`, and callers depend on the order.**
+    `Sidebar` reads whether a delete orphans the open request *first*, because the optimistic
+    patch removes the subtree and asking afterwards always answers "no". `RequestEditor` needs
+    the opposite guard: the `blocker` captured in the dialog's closure still reads `'blocked'`
+    after `proceed()` has run, so a `proceeded` ref stops `onClose` from calling `reset()`
+    straight after — which would cancel the navigation and look like a dead button.
+  - **The prompt/confirm state in `Sidebar` holds callbacks**, and `setPrompt`/`setConfirm` are
+    stable setters, so `handlers` stays memoized and no row re-renders when a dialog opens.
+  - `--on-danger` was added to all four themes for the destructive button (white fails on the
+    dark themes' lighter red, exactly as with `--on-accent`), plus two `PAIRS` entries — a token
+    not in `PAIRS` is unchecked, not passing.
+  - ⚠️ **`Dialog` restores focus itself and must keep doing so.** Call sites mount it
+    conditionally (`{state && <MoveToDialog/>}`), and Radix restores focus from
+    `onCloseAutoFocus`, which never runs when the tree is unmounted in the same tick that closes
+    it — focus lands on `<body>`. It captures `document.activeElement` on mount and refocuses on
+    unmount, in a `setTimeout` so it does not race Radix's teardown. Found by driving the app;
+    invisible to any test that does not assert on `document.activeElement`.
+  - ⚠️ Relatedly, **`NodeMenu` focuses its `⋯` synchronously before running an item's
+    `onSelect`.** The clicked menu item unmounts, so without it focus is already on `<body>` by
+    the time a dialog opens and there is nothing to restore to.
+  - **Every dropdown is [Select.tsx](frontend/src/components/ui/Select.tsx)** — the workspace
+    switcher, the theme picker, the method picker, body mode, auth type and auth placement. One
+    file, same seam argument as `Dialog`. It takes flat items or groups, an optional `hint`
+    second line (the theme picker's, which a native `<option>` could only carry as a `title`
+    tooltip nobody finds) and a per-item `className` (the method colours, which an `<option>`
+    ignores outright).
+    - ⚠️ **Pass `undefined`, never `''`, for "nothing selected"** — Radix reserves the empty
+      string, and an unmatched value renders a blank trigger with no placeholder.
+    - ⚠️ `position="popper"`, not the default `item-aligned`, which tries to put the selected row
+      over the trigger and pins a long list against a viewport edge. Height is capped with
+      `--radix-select-content-available-height`; a fixed `max-h` clipped the last hint line.
+    - `data-[highlighted]` (keyboard *and* pointer focus) and `data-[state=checked]` (the current
+      value) are different things and both are styled. Highlighting only the checked row makes
+      arrowing through the list invisible.
+  - ⚠️ **No native `<select>` inside a themed surface.** `<option>` rows are painted by the
+    platform: Chrome renders them opaque white whatever `background-color` and `color-scheme`
+    say, so the move dialog's sized `<select>` was a white slab on Dark and Midnight — the only
+    element in the app that ignored the theme. `MoveToDialog` uses a `role="listbox"` of divs
+    with arrow/Home/End/Enter handling instead. (The header's one-line `<select>`s are fine —
+    the closed control *is* styleable; it is the open list that is not.)
+  - ⚠️ **A move target's identity is the pair (collection, folder), never the folder id.** Every
+    collection root has `id: null`, so keying on the id alone selects all of them at once — and
+    pre-selected collection 1's root for a request living in collection 300, one Enter from a
+    silent cross-collection move. `MoveTarget` carries `depth` for indentation now too, instead
+    of leading spaces baked into `label` (a workaround for `<option>` being unstylable).
+  - ⚠️ **`NodeMenu` stays hand-written and must not become a Radix `DropdownMenu`.** A Radix
+    root and trigger would mount *per row*, and thousands of rows are mounted at once — the same
+    cost the `getItems` thunk exists to avoid. Its `getBoundingClientRect` positioning and
+    above/below flip are already the solved case.
+  - The cost is recorded so it can be judged later: the three packages are **+101 kB raw /
+    +33 kB gzip** over the pre-Radix baseline (dialog + tabs +53/+18, select a further +46/+15,
+    the prompt/confirm wrappers +2/+0.4).
+    The native controls they replaced were keyboard- and screen-reader-correct for free; that
+    correctness now rests on Radix rather than on the browser. Nothing else may be added on the strength of "we already have Radix" — each package
+    is its own decision.
 - No icon library and no editor library — text glyphs (`▸ ▾ ⋯`) and a plain `<textarea>` with a
   Format JSON button. Both are dependency decisions belonging to the execution slice. The two
   node icons in [NodeIcon.tsx](frontend/src/features/tree/NodeIcon.tsx) are hand-written inline

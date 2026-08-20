@@ -3,6 +3,7 @@ import {
   type RequestAuth,
   type RequestAuthType,
 } from '@postman-clone/contracts'
+import { Select } from '../../components/ui/Select'
 
 function emptyAuth(type: RequestAuthType): RequestAuth {
   switch (type) {
@@ -39,18 +40,12 @@ export function AuthTab({
 }) {
   return (
     <div className="max-w-md space-y-3">
-      <select
+      <Select
+        label="Auth type"
         value={auth.type}
-        aria-label="Auth type"
-        onChange={(e) => onChange(emptyAuth(e.target.value as RequestAuthType))}
-        className="rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
-      >
-        {REQUEST_AUTH_TYPES.map((type) => (
-          <option key={type} value={type}>
-            {type}
-          </option>
-        ))}
-      </select>
+        onValueChange={(next) => onChange(emptyAuth(next as RequestAuthType))}
+        entries={REQUEST_AUTH_TYPES.map((type) => ({ value: type, label: type }))}
+      />
 
       {auth.type === 'inherit' && (
         <p className="text-sm text-fg-faint">
@@ -123,16 +118,17 @@ export function AuthTab({
           </label>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-fg-muted">Add to</span>
-            <select
+            <Select
+              label="Add to"
               value={auth.in}
-              onChange={(e) =>
-                onChange({ ...auth, in: e.target.value as 'header' | 'query' })
+              onValueChange={(next) =>
+                onChange({ ...auth, in: next as 'header' | 'query' })
               }
-              className="rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
-            >
-              <option value="header">Header</option>
-              <option value="query">Query param</option>
-            </select>
+              entries={[
+                { value: 'header', label: 'Header' },
+                { value: 'query', label: 'Query param' },
+              ]}
+            />
           </label>
         </>
       )}

@@ -123,6 +123,13 @@ export function NodeMenu({
               disabled={item.disabled}
               onClick={() => {
                 setAnchor(null)
+                // ⚠️ Focus goes back to the ⋯ *before* the action runs, and
+                // synchronously. The clicked menu item is about to unmount, so
+                // without this the browser drops focus to `<body>` — and an
+                // action that opens a dialog (Move to…) would then have nothing
+                // to restore focus to when it closes, stranding a keyboard user
+                // at the top of the page.
+                buttonRef.current?.focus()
                 item.onSelect()
               }}
               className={`block w-full px-3 py-1.5 text-left text-sm transition disabled:opacity-40 ${

@@ -65,6 +65,7 @@
 
   /* Danger — destructive actions and validation failures */
   --color-danger: var(--danger);
+  --color-on-danger: var(--on-danger);
   --color-danger-hover: var(--danger-hover);
   --color-danger-soft: var(--danger-soft);
   --color-danger-soft-fg: var(--danger-soft-fg);
@@ -124,6 +125,7 @@
   --focus: #c7d2fe;
 
   --danger: #dc2626;
+  --on-danger: #ffffff;
   --danger-hover: #b91c1c;
   --danger-soft: #fef2f2;
   --danger-soft-fg: #b91c1c;
@@ -185,6 +187,7 @@
   --focus: rgb(129 140 248 / 0.45);
 
   --danger: #f87171;
+  --on-danger: #1a0a0a;
   --danger-hover: #fca5a5;
   --danger-soft: rgb(248 113 113 / 0.14);
   --danger-soft-fg: #fca5a5;
@@ -237,6 +240,7 @@
   --focus: rgb(34 211 238 / 0.4);
 
   --danger: #fb7185;
+  --on-danger: #1a0509;
   --danger-hover: #fda4af;
   --danger-soft: rgb(251 113 133 / 0.14);
   --danger-soft-fg: #fda4af;
@@ -290,6 +294,7 @@
   --focus: #f5d9a8;
 
   --danger: #b91c1c;
+  --on-danger: #fffaf5;
   --danger-hover: #991b1b;
   --danger-soft: #fbeae6;
   --danger-soft-fg: #991b1b;

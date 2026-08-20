@@ -1,4 +1,6 @@
 import type { SessionSummary } from '@postman-clone/contracts'
+import { useState } from 'react'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useRevokeSessionMutation } from './sessionsApi'
 
 /** Small local formatter — not worth a date library for one label. */
@@ -27,22 +29,29 @@ function relativeTime(iso: string | null): string {
 
 export function SessionItem({ session }: { session: SessionSummary }) {
   const [revokeSession, { isLoading }] = useRevokeSessionMutation()
+  const [confirming, setConfirming] = useState(false)
 
   function handleRevoke() {
     // Revoking your own session correctly cascades into a logout, but that
-    // should not be a surprise click.
-    if (
-      session.current &&
-      !window.confirm('Sign out of this device? You will be returned to the login page.')
-    ) {
-      return
-    }
-
-    void revokeSession(session.id)
+    // should not be a surprise click. Revoking another device needs no
+    // confirmation — it is undoable by signing in again there.
+    if (session.current) setConfirming(true)
+    else void revokeSession(session.id)
   }
 
   return (
     <li className="flex items-center gap-4 rounded-lg border border-line bg-surface p-4 shadow-sm">
+      {confirming && (
+        <ConfirmDialog
+          title="Sign out of this device?"
+          message="You will be returned to the login page."
+          confirmLabel="Sign out"
+          danger
+          onConfirm={() => void revokeSession(session.id)}
+          onClose={() => setConfirming(false)}
+        />
+      )}
+
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-fg">
           {session.userAgent ?? 'Unknown device'}

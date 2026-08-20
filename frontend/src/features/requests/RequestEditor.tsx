@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import * as Tabs from '@radix-ui/react-tabs'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { useEffect, useRef, useState } from 'react'
 import { useBlocker, useParams } from 'react-router'
 import { errorMessage, type QueryError } from '../../lib/api-error'
 import { AuthTab } from './AuthTab'
@@ -28,6 +30,11 @@ export function RequestEditor() {
   // A tab is not a location. Putting it in the URL would mean Back closes a
   // tab instead of leaving the request, which is not what Back means here.
   const [tab, setTab] = useState<Tab>('Params')
+
+  // ⚠️ Keyed on the request id, not on `request`: RTK Query hands back a new
+  // object on every background refetch, and resetting on that would throw the
+  // user back to Params mid-edit. Same trap as `useRequestDraft`'s seeding.
+  useEffect(() => setTab('Params'), [requestId])
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const save = async () => {
@@ -68,21 +75,17 @@ export function RequestEditor() {
    * refetch storm — every keystroke in the name field would refetch the whole
    * workspace. Unsaved work is guarded here instead.
    *
-   * `window.confirm` is a labelled placeholder; a real dialog is deferred.
+   * ⚠️ The blocker stays *blocked* while the dialog is open — there is no local
+   * "is the dialog showing" state, because `blocker.state` already is that
+   * state, and a second copy could disagree with it. Every exit runs exactly
+   * one of `proceed` or `reset`; leaving both uncalled wedges navigation
+   * silently, which is the failure mode to watch for here.
    */
+  const proceeded = useRef(false)
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       isDirty && currentLocation.pathname !== nextLocation.pathname,
   )
-
-  useEffect(() => {
-    if (blocker.state !== 'blocked') return
-    if (window.confirm('You have unsaved changes. Leave without saving?')) {
-      blocker.proceed()
-    } else {
-      blocker.reset()
-    }
-  }, [blocker])
 
   if (isLoading) {
     return <p className="p-6 text-sm text-fg-faint">Loading…</p>
@@ -100,6 +103,34 @@ export function RequestEditor() {
 
   return (
     <div className="flex h-full flex-col">
+      {blocker.state === 'blocked' && (
+        <ConfirmDialog
+          title="Unsaved changes"
+          message="Leaving now discards the edits to this request."
+          confirmLabel="Discard and leave"
+          cancelLabel="Keep editing"
+          danger
+          onConfirm={() => {
+            proceeded.current = true
+            blocker.proceed()
+          }}
+          // Escape and the overlay land here too, and staying put is the safe
+          // default — a dismissed dialog cancels the navigation.
+          //
+          // ⚠️ `ConfirmDialog` calls `onClose` straight after `onConfirm`, and
+          // the `blocker` in this closure is the one from the render that
+          // opened it — so its `.state` still reads `'blocked'` even though
+          // `proceed()` has just run. Without the ref this would call `reset()`
+          // immediately after `proceed()` and the navigation would never
+          // happen: the dialog closes, nothing moves, and it looks like the
+          // button did nothing.
+          onClose={() => {
+            if (!proceeded.current) blocker.reset()
+            proceeded.current = false
+          }}
+        />
+      )}
+
       <div className="space-y-3 border-b border-line bg-surface px-4 py-3">
         <input
           value={draft.name}
@@ -121,51 +152,64 @@ export function RequestEditor() {
         {saveError && <p className="text-sm text-danger">{saveError}</p>}
       </div>
 
-      <div className="flex gap-1 border-b border-line bg-surface px-4">
-        {TABS.map((name) => (
-          <button
-            key={name}
-            type="button"
-            onClick={() => setTab(name)}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${
-              tab === name
-                ? 'border-accent text-accent'
-                : 'border-transparent text-fg-subtle hover:text-fg'
-            }`}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
+      {/*
+        ⚠️ Radix `Tabs` for the roving focus, ←/→/Home/End, and the
+        `tablist`/`tab`/`tabpanel` wiring — behaviour only. Every colour here is
+        still a semantic token, so `yarn contrast` covers this surface exactly
+        as it did when these were bare buttons.
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        {tab === 'Params' && (
-          <KeyValueEditor
-            entries={draft.queryParams}
-            keyPlaceholder="Parameter"
-            onChange={(queryParams) => patch({ queryParams })}
-          />
-        )}
-        {tab === 'Headers' && (
-          <KeyValueEditor
-            entries={draft.headers}
-            keyPlaceholder="Header"
-            onChange={(headers) => patch({ headers })}
-          />
-        )}
-        {tab === 'Body' && (
-          <BodyTab body={draft.body} onChange={(body) => patch({ body })} />
-        )}
-        {tab === 'Auth' && (
-          <AuthTab auth={draft.auth} onChange={(auth) => patch({ auth })} />
-        )}
-        {tab === 'Scripts' && (
-          <ScriptsTab
-            scripts={draft.scripts}
-            onChange={(scripts) => patch({ scripts })}
-          />
-        )}
-      </div>
+        `min-h-0` on the root and the panel is load-bearing for the same reason
+        it is on the workbench grid: without it the panel sizes to its content
+        and the whole editor scrolls instead of the panel.
+      */}
+      <Tabs.Root
+        value={tab}
+        onValueChange={(next) => setTab(next as Tab)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <Tabs.List className="flex gap-1 border-b border-line bg-surface px-4">
+          {TABS.map((name) => (
+            <Tabs.Trigger
+              key={name}
+              value={name}
+              className="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-fg-subtle transition hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus data-[state=active]:border-accent data-[state=active]:text-accent"
+            >
+              {name}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+
+        {/* Inactive panels unmount, as they did under the old `&&` render.
+            Every tab's state lives in the draft above, so nothing is lost. */}
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <Tabs.Content value="Params">
+            <KeyValueEditor
+              entries={draft.queryParams}
+              keyPlaceholder="Parameter"
+              onChange={(queryParams) => patch({ queryParams })}
+            />
+          </Tabs.Content>
+          <Tabs.Content value="Headers">
+            <KeyValueEditor
+              entries={draft.headers}
+              keyPlaceholder="Header"
+              onChange={(headers) => patch({ headers })}
+            />
+          </Tabs.Content>
+          <Tabs.Content value="Body">
+            <BodyTab body={draft.body} onChange={(body) => patch({ body })} />
+          </Tabs.Content>
+          <Tabs.Content value="Auth">
+            <AuthTab auth={draft.auth} onChange={(auth) => patch({ auth })} />
+          </Tabs.Content>
+          <Tabs.Content value="Scripts">
+            <ScriptsTab
+              scripts={draft.scripts}
+              onChange={(scripts) => patch({ scripts })}
+            />
+          </Tabs.Content>
+        </div>
+      </Tabs.Root>
     </div>
   )
 }

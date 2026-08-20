@@ -103,6 +103,10 @@ const PAIRS = [
   ['accent on surface', '--accent', '--surface', 4.5],
   ['accent on canvas', '--accent', '--canvas', 4.5],
   ['accent-soft-fg on accent-soft', '--accent-soft-fg', '--accent-soft', 4.5],
+  // The destructive button in `ConfirmDialog`. Like `--on-accent`, it cannot be
+  // one colour across themes: white on the dark themes' lighter red fails.
+  ['on-danger on danger', '--on-danger', '--danger', 4.5],
+  ['on-danger on danger-hover', '--on-danger', '--danger-hover', 4.5],
   ['danger on surface', '--danger', '--surface', 4.5],
   ['danger on canvas', '--danger', '--canvas', 4.5],
   ['danger-soft-fg on danger-soft', '--danger-soft-fg', '--danger-soft', 4.5],

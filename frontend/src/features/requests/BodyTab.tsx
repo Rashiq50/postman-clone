@@ -4,6 +4,7 @@ import {
   type RequestBodyMode,
 } from '@postman-clone/contracts'
 import { useState } from 'react'
+import { Select } from '../../components/ui/Select'
 import { KeyValueEditor } from './KeyValueEditor'
 
 /** Switching mode keeps nothing: each branch of the union has its own fields. */
@@ -21,7 +22,7 @@ function emptyBody(mode: RequestBodyMode): RequestBody {
 }
 
 /**
- * A mode `<select>` and a plain `<textarea>`.
+ * A mode dropdown and a plain `<textarea>`.
  *
  * No editor library. Adding one is a dependency, a bundle-size and a theming
  * decision that belongs with the execution slice, where syntax highlighting of
@@ -51,21 +52,15 @@ export function BodyTab({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <select
+        <Select
+          label="Body type"
           value={body.mode}
-          aria-label="Body type"
-          onChange={(e) => {
+          onValueChange={(next) => {
             setFormatError(null)
-            onChange(emptyBody(e.target.value as RequestBodyMode))
+            onChange(emptyBody(next as RequestBodyMode))
           }}
-          className="rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
-        >
-          {REQUEST_BODY_MODES.map((mode) => (
-            <option key={mode} value={mode}>
-              {mode}
-            </option>
-          ))}
-        </select>
+          entries={REQUEST_BODY_MODES.map((mode) => ({ value: mode, label: mode }))}
+        />
 
         {body.mode === 'json' && (
           <button

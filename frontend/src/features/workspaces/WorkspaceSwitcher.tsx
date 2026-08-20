@@ -1,9 +1,10 @@
 import { useNavigate, useParams } from 'react-router'
+import { Select } from '../../components/ui/Select'
 import { useGetWorkspacesQuery } from './workspacesApi'
 
 /**
- * A plain `<select>` that navigates. The workspace id lives in the URL, so
- * switching *is* a navigation — there is no state to set.
+ * A dropdown that navigates. The workspace id lives in the URL, so switching
+ * *is* a navigation — there is no state to set.
  */
 export function WorkspaceSwitcher() {
   const { workspaceId } = useParams<{ workspaceId: string }>()
@@ -14,22 +15,18 @@ export function WorkspaceSwitcher() {
   if (workspaces.length === 0) return null
 
   return (
-    <label className="flex items-center gap-2">
-      <span className="sr-only">Workspace</span>
-      <select
-        value={workspaceId ?? ''}
-        onChange={(e) => void navigate(`/w/${e.target.value}`)}
-        className="max-w-[12rem] rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
-      >
-        {/* Only while the route has no workspace — otherwise a controlled
-            select with no matching option warns and renders blank. */}
-        {!workspaceId && <option value="">Select a workspace…</option>}
-        {workspaces.map((workspace) => (
-          <option key={workspace.id} value={workspace.id}>
-            {workspace.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Select
+      label="Workspace"
+      // ⚠️ `undefined`, never `''`: Radix reserves the empty string, and an
+      // unmatched value renders a blank trigger with no placeholder.
+      value={workspaceId ?? undefined}
+      placeholder="Select a workspace…"
+      onValueChange={(id) => void navigate(`/w/${id}`)}
+      triggerClassName="max-w-[12rem]"
+      entries={workspaces.map((workspace) => ({
+        value: workspace.id,
+        label: workspace.name,
+      }))}
+    />
   )
 }
