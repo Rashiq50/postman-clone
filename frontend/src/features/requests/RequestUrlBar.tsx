@@ -57,14 +57,20 @@ export function RequestUrlBar({
         placeholder="https://api.example.com/users"
         spellCheck={false}
         onChange={(e) => onUrlChange(e.target.value)}
-        className="min-w-0 flex-1 rounded-md border border-line-strong px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+        className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition placeholder:text-fg-faint hover:border-fg-faint focus:border-accent"
       />
 
+      {/* The shortcut lives in `title` rather than in the label: a `⌘S` badge
+          inside the button would be wrong on Windows and right on macOS, and
+          the same handler answers to both. `cursor-not-allowed` matters here
+          because the button spends most of its life disabled — a click on a
+          40%-opacity control otherwise gives no feedback at all. */}
       <button
         type="button"
         onClick={onSave}
         disabled={!isDirty || isSaving}
-        className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:opacity-40"
+        title="Save (Ctrl+S / ⌘S)"
+        className="shrink-0 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-40"
       >
         {isSaving ? 'Saving…' : 'Save'}
       </button>

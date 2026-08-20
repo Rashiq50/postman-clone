@@ -341,6 +341,27 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   returns a new object identity on every background refetch, so depending on the object wipes
   whatever the user was typing — intermittent, and presents as a dropped keystroke. There is no
   autosave either: autosave plus a tree that invalidates on renames is a refetch storm.
+- **The request editor's chrome states what the draft is doing, because nothing else can.**
+  With no autosave and no Send, a saved request and an edited one look identical otherwise. So
+  the header carries a `role="status"` dirty pill (`Saving…` / `Unsaved changes` / `Saved`,
+  `isSaving` tested *first* — a request stays dirty until its response lands), and each tab
+  carries a badge built from the draft: a count of the *enabled and non-blank* rows for Params
+  and Headers, a dot for Body / Auth / Scripts. ⚠️ The badges read
+  `group-data-[state=active]` off the Radix trigger rather than taking an `isActive` prop —
+  the trigger already owns that state, and a prop is a second copy that can disagree.
+- **The breadcrumb subscribes to `getTree`; it does not fetch it.** `requestPath` in
+  [requestPath.ts](frontend/src/features/tree/requestPath.ts) walks the cached tree for the
+  *names* of a request's ancestors (`ancestorsOf` in `treeCache.ts` answers with ids, for cache
+  patches). The sidebar is mounted beside the pane, so this is a second subscriber to one
+  response — and it must **not** opt into `refetchOnFocus`, which belongs to the sidebar's hook
+  alone. ⚠️ Its row holds `h-4` whether or not a path is drawn: the tree can arrive after the
+  request does, and a breadcrumb appearing late would shove the title down under the caret.
+- **The tab panel is a `bg-surface` card on `bg-canvas`**, not content laid straight onto the
+  canvas. Besides separating chrome from content it puts every label back onto `surface`, which
+  is the background `PAIRS` in `check-contrast.mjs` actually audits the foreground tokens
+  against — `fg-faint on canvas` is not a checked pair. Loading is a skeleton of that same
+  layout rather than a line of text: opening a request is the most frequent navigation in the
+  app, so a pane that blanks is a flicker seen dozens of times an hour.
 - ⚠️ **`NodeMenu` is `position: fixed` from `getBoundingClientRect()`, and flips above its row
   when there is no space below.** The sidebar is an `overflow-y-auto` container, so an
   absolutely-positioned menu on a bottom row is clipped and invisible; escaping that clip then
