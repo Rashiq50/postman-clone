@@ -320,8 +320,9 @@ this order:
 | `auth` | every string field: bearer token, basic user/pass, apiKey key/value. |
 
 `secretValues` collects every substituted value whose source variable had `secret: true`.
-`redact.ts` masks each occurrence with `••••••` in anything we **store** (chiefly the history row's
-`url`), so `?token={{apiKey}}` does not sit in the history list forever. ⚠️ A mitigation, not
+`redact.ts` masks each occurrence with `••••••` in anything we **store**: the history row's `url`
+**and every `RedirectHop.from`/`to`** — the hops land in the `redirects` jsonb, so an unredacted
+`?token={{apiKey}}` would survive there even with the `url` masked. ⚠️ A mitigation, not
 encryption — secrets remain plaintext in `environments.variables` and in the live response.
 
 ### `auth.type === 'inherit'` resolves to `none`
@@ -399,16 +400,23 @@ v6-only range check.
 
 `resolveAndScreen(hostname)`:
 
-1. `net.isIP(hostname)` non-zero → it *is* a literal; screen it, return `[it]`, no DNS.
+1. ⚠️ **Strip the brackets first.** WHATWG `url.hostname` for `http://[::1]/` is `"[::1]"` —
+   brackets included — and `net.isIP('[::1]')` is `0`, so without this step **every IPv6 literal
+   falls through the literal check** into `dns.lookup`, which fails on the bracketed form. That
+   fails *closed* (as `dns`, not a bypass), but it means the entire IPv6 half of the table above is
+   unreachable by literal URL and none of the unwrapping cases ever runs. Pin spec cases on the
+   full-URL forms `http://[::1]/` and `http://[::ffff:127.0.0.1]/`, not just bare strings into
+   `isBlockedAddress`.
+2. `net.isIP(hostname)` non-zero → it *is* a literal; screen it, return `[it]`, no DNS.
    ⚠️ **Screen `url.hostname`, never the raw input.** `new URL()` normalizes decimal, octal and hex
    IPv4 forms for `http:` (`http://2130706433/` → `127.0.0.1`), which is what makes those forms
    safe — pin a spec case on each of `2130706433`, `0177.0.0.1`, `0x7f.1`.
-2. Otherwise `dns.promises.lookup(hostname, { all: true, verbatim: true })`.
-3. **Every** returned address is screened; if *any* is blocked the whole send fails
+3. Otherwise `dns.promises.lookup(hostname, { all: true, verbatim: true })`.
+4. **Every** returned address is screened; if *any* is blocked the whole send fails
    `blocked-address`. ⚠️ Not "filter and use the survivors" — a name resolving to both a public and
    a private address is a rebinding attack, and picking the public one only delays it.
-4. Return the screened list; the caller pins `[0]`.
-5. `SEND_ALLOW_PRIVATE_NETWORK=true` skips step 3 only. DNS still runs, the pin still happens. Log
+5. Return the screened list; the caller pins `[0]`.
+6. `SEND_ALLOW_PRIVATE_NETWORK=true` skips step 4 only. DNS still runs, the pin still happens. Log
    a `warn` once at boot when it is on, so nobody ships it by accident.
 
 Scheme allow-list: `http:` and `https:` only. Everything else → `invalid-url`. No `file:`, no
@@ -476,8 +484,22 @@ anyway, decompress through `zlib` with **`maxOutputLength: SEND_MAX_RESPONSE_BYT
 
 ⚠️ **Never use `buf.toString('utf8')` as the test.** It substitutes U+FFFD for invalid bytes and so
 always "succeeds", which turns every JPEG into mojibake text. `TextDecoder` with `fatal: true` is
-the test. This also matters downstream: Postgres rejects a ` ` byte in a jsonb/text column, so
+the test. This also matters downstream: Postgres rejects a `\0` (NUL) byte in a jsonb/text column, so
 a body that is not really text is a 500 on the history insert, not merely an ugly pane.
+
+⚠️ **The fatal decoder does not close that hole by itself — `\0` is *valid* UTF-8.**
+`new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from([0x61, 0x00, 0x62]))` decodes without
+throwing (verified on this Node), and Postgres then rejects the `\0` on insert anyway. So the rule
+has one more clause: **decoded text containing `\0` → `base64`**, exactly as if the decode had
+failed. Apply the same check to response *header values* before they land in the `headers` jsonb.
+Pin a spec case on a body of `a\0b`.
+
+**Body on a bodyless method** (`GET`, `HEAD`, `DELETE`, `OPTIONS` with a non-`none` body mode):
+**send it verbatim and emit `body-on-bodyless-method`** — the same philosophy as not
+re-serialising malformed JSON: deliberately unusual requests are the point of a testing tool, and
+dropping the body silently would be the surprise. `HEAD` needs nothing special on the response side
+— the response simply has no body and the pane shows `empty` — but say so in a spec case so
+nobody adds a wait for one.
 
 **Body assembly.** `json` sends the raw text with `Content-Type: application/json` **without
 re-serialising** — the user's formatting, and their deliberately malformed JSON, are both the point
@@ -513,7 +535,13 @@ Mirroring `buildThrottlerOptions` exactly:
 
 ```ts
 export const SEND_OPTIONS = Symbol('SEND_OPTIONS')
-export interface SendOptions { allowPrivateNetwork: boolean; connectTimeoutMs: number; /* … */ }
+export interface SendOptions {
+  allowPrivateNetwork: boolean
+  connectTimeoutMs: number
+  /* …every SEND_* knob… */
+  /** The screening predicate itself. Defaults to ssrf.ts's `isBlockedAddress`. */
+  isBlockedAddress: (ip: string) => boolean
+}
 export function buildSendOptions(config: ConfigService): SendOptions
 ```
 
@@ -522,6 +550,14 @@ export function buildSendOptions(config: ConfigService): SendOptions
 spec is always too late — the identical trap already recorded for `THROTTLER_OPTIONS`.
 `send.e2e-spec.ts` runs a real `http.createServer` on `127.0.0.1`, which the default policy blocks,
 so it must flip the policy by **overriding the `SEND_OPTIONS` provider**, never `process.env`.
+
+⚠️ **The predicate is part of the options, and that is what makes the e2e suite expressible at
+all.** A bare `allowPrivateNetwork: boolean` cannot cover the suite in §13: the happy-path tests
+need `127.0.0.1` (the fixture) *allowed*, the blocked-address test needs it *blocked*, and the
+redirect test needs hop 1 *allowed* while hop 2 is *blocked* — and locally both hops are loopback.
+With the predicate injectable, one override serves all three: allow `127.0.0.1`, block a marker
+address (`127.0.0.2` — still loopback, still bindable on nothing), and have the fixture 302 to
+`http://127.0.0.2/`. Production never overrides it; `buildSendOptions` always wires the real table.
 
 ---
 
@@ -578,6 +614,15 @@ are checked by `@Validate(...)` as plain objects, and plain objects pass through
   workspaces could otherwise inject workspace B's variables into a send from workspace A. The check
   is one predicate — `e."id" = :envId AND e."workspaceId" = :ws AND <ENVIRONMENT_SCOPE>` — and a
   miss is a 404 naming the environment.
+- **`environmentId` omitted → the caller's active environment**, which is a concrete query the
+  contract comment alone does not convey: read `activeEnvironmentId` from the caller's
+  `workspace_members` row **for the request's workspace** (reached request → collection →
+  workspace — the same join `REQUEST_SCOPE` already walks). A stale id is impossible by
+  construction: the column is `ON DELETE SET NULL` (§6), so the read answers a live environment or
+  `null`, never a dangling reference. ⚠️ The column does not exist until Phase 5, so **Phase 3
+  implements omitted-as-none and Phase 5 adds the default in the same change as the migration** —
+  until then the contract comment on `SendRequestInput.environmentId` describes Phase 5, not
+  Phase 3 (see §9).
 
 ### Throttling — its own budget, keyed on the user
 
@@ -636,10 +681,13 @@ Four new jsonb columns are four chances to emit `migration:generate` churn forev
 @Column({ type: 'jsonb', default: () => `'[]'` })  headers: ResponseHeader[]
 @Column({ type: 'jsonb', default: () => `'[]'` })  warnings: SendWarning[]
 @Column({ type: 'jsonb', default: () => `'[]'` })  redirects: RedirectHop[]
-@Column({ type: 'jsonb', default: () => `'{}'` })  timing: SendTiming
+@Column({ type: 'jsonb' })                         timing: SendTiming
 ```
 
-The migration side writes `'[]'::jsonb` / `'{}'::jsonb`, matching `AddRequestScripts`.
+`timing` gets **no default**: `'{}'` can never satisfy the contract's non-nullable `totalMs`, and
+the column is written on every insert — a default could only mask a path that forgot to, the same
+argument recorded for `position`. The migration side writes `'[]'::jsonb` for the three defaulted
+columns, matching `AddRequestScripts`.
 
 **No `position` column.** Ordering is `createdAt DESC, id DESC`; there is nothing to drag.
 
@@ -707,8 +755,13 @@ body is capped separately and much lower than the live one, and `stored-body-tru
 on the record, not on the live result.
 
 ⚠️ **This table is a *third* plaintext-secrets location**, beyond `requests.auth` and
-`environments.variables` — it holds the `Authorization` header the engine just built, and response
-bodies. `redact.ts` covers the stored `url` only. The README's plaintext warning must name it in the
+`environments.variables` — it holds response bodies (which echo whatever the target reflects back,
+`httpbin`-style) and the stored `url`/`redirects`, redacted only for values the environment marked
+`secret`. **Sent request headers are deliberately not stored** — there is no `sentHeaders` column,
+which is what keeps the freshly built `Authorization` header out of this table entirely; the cost
+is that a history row (especially a `usedDraft` one) shows what came back but not what went out
+beyond method + URL. Record that trade-off on the entity so nobody "completes" the row with the
+most secret-laden column in the feature. The README's plaintext warning must name this table in the
 same change; the row cap limits the blast radius, it does not remove it.
 
 ---
@@ -956,7 +1009,11 @@ but not the example is invisible to the next person who copies it.
 | **8** | `HistoryPane`, the `Execution` tag, past-run mode | History browsable per request. |
 | **9** *(optional)* | `SEND_MAX_CONCURRENT` in-flight semaphore, draggable splitter | Bounded concurrent sends; resizable pane. |
 
-Phases 1–5 are backend-only and independently mergeable. Phase 6 is shippable ahead of 7 — an
+Phases 1–5 are backend-only and independently mergeable — with two caveats. **Phases 3 and 4
+deploy together**: the contract says `executionId` is "null only when the history insert failed",
+which is false while the table does not exist, so 3 alone is mergeable but not shippable. And the
+"omitted → active environment" default on `SendRequestInput.environmentId` is **Phase 5 behavior**
+(§4); Phase 3 treats omitted as none. Phase 6 is shippable ahead of 7 — an
 environment editor is useful the moment the API resolves variables, which is the inversion of the
 original "no UI without interpolation" argument, now satisfied.
 
@@ -986,8 +1043,12 @@ original "no UI without interpolation" argument, now satisfied.
 - ⚠️ **The response cap is on *decompressed* bytes.** We ask for `identity`; if the server compresses
   anyway, `zlib`'s `maxOutputLength` is what makes the cap real.
 - ⚠️ **`buf.toString('utf8')` always "succeeds"** — it substitutes U+FFFD, so every JPEG becomes
-  mojibake. Use `TextDecoder('utf-8', { fatal: true })` to decide text vs base64. Postgres also
-  rejects ` `, so this is a 500 on the history insert, not just an ugly pane.
+  mojibake. Use `TextDecoder('utf-8', { fatal: true })` to decide text vs base64 — **and then still
+  check for `\0`**, which is valid UTF-8 the fatal decoder passes but Postgres rejects in a
+  text/jsonb column. Text containing `\0` falls to base64 too, or the history insert is a 500.
+- ⚠️ **`url.hostname` keeps the brackets on an IPv6 literal** (`"[::1]"`), and `net.isIP` answers
+  `0` for the bracketed form — strip them before the literal check or the whole IPv6 table is dead
+  code reached by nothing.
 - ⚠️ **A failed history insert must not fail the send.** The request already left; a 500 here invites
   a retry that fires the upstream call twice.
 - ⚠️ **`workspace_members.activeEnvironmentId` is `ON DELETE SET NULL`.** `CASCADE` deletes the
@@ -1037,12 +1098,20 @@ original "no UI without interpolation" argument, now satisfied.
    a unit test rather than trusting it.
 2. Per-name `@SkipThrottle({ burst: true })` in `@nestjs/throttler@6.5`; fallback is a second guard
    subclass with its own window set.
-3. `zlib` `maxOutputLength` overflow behaviour (throws `ERR_BUFFER_TOO_LARGE`) — confirm the code so
+3. Three existing e2e suites already override `THROTTLER_OPTIONS` with only `burst`/`sustained`
+   ([register.e2e-spec.ts:93](backend/test/register.e2e-spec.ts#L93),
+   [register-throttle.e2e-spec.ts:56](backend/test/register-throttle.e2e-spec.ts#L56),
+   [workspaces.e2e-spec.ts:68](backend/test/workspaces.e2e-spec.ts#L68)). Once the options grow
+   `sendBurst`/`sendSustained` and routes carry per-name `@SkipThrottle`, those overrides define a
+   throttler set the decorator names no longer match. A skip entry for an unregistered name should
+   no-op — confirm it does, and update the three overrides to the four-window shape in the same
+   change so the suites and production configure the same universe.
+4. `zlib` `maxOutputLength` overflow behaviour (throws `ERR_BUFFER_TOO_LARGE`) — confirm the code so
    it maps to truncation, not `unknown`.
-4. `new URL()` normalization of decimal / octal / hex IPv4 hosts on this Node — pin whichever forms
+5. `new URL()` normalization of decimal / octal / hex IPv4 hosts on this Node — pin whichever forms
    it does *not* normalize as explicit `ssrf.spec.ts` cases.
-5. The `WorkspaceMemberEntity` → `EnvironmentEntity` relation for a TS circular-import warning.
-6. Run `migration:generate` once against `request_executions`, diff it, discard the known
+6. The `WorkspaceMemberEntity` → `EnvironmentEntity` relation for a TS circular-import warning.
+7. Run `migration:generate` once against `request_executions`, diff it, discard the known
    `FK_folders_parent` / `FK_requests_folder` noise, and confirm nothing else appears.
 
 ---
@@ -1059,14 +1128,16 @@ cd frontend && yarn build && yarn lint
 ```
 
 **`backend/test/send.e2e-spec.ts`**, against a local `http.createServer` fixture so nothing touches
-the public internet, with `SEND_OPTIONS` overridden:
+the public internet. One app instance, one `SEND_OPTIONS` override carrying the test predicate from
+§3.8 — allow `127.0.0.1`, block `127.0.0.2` — so allowed and blocked addresses coexist in one suite:
 
 - 200 with a JSON body → `outcome: 'response'`, body and headers intact.
 - Target returns 500 → **HTTP 200** from our API, `outcome: 'response'`, `status: 500`.
 - Connection refused → **HTTP 200**, `outcome: 'failure'`, `kind: 'connect'`.
-- `http://127.0.0.1/` with the policy on → `kind: 'blocked-address'`, **and the fixture records that
-  no socket was opened**.
-- A host that 302s to a loopback address → blocked on the hop.
+- `http://127.0.0.2/` (the marker the predicate blocks) → `kind: 'blocked-address'`, **and the
+  fixture records that no socket was opened**.
+- The fixture 302s to `http://127.0.0.2/` → blocked on the hop.
+- A `text` body containing `\0` → stored and returned as `base64`, and the history insert succeeds.
 - A cross-origin redirect → assert `Authorization` was **not** forwarded.
 - A response over the cap → `bodyTruncated: true`, still `outcome: 'response'`.
 - A header value containing `\r\n` from a variable → `kind: 'invalid-header'`.
