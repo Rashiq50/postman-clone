@@ -26,7 +26,11 @@ export function AppHeader({ wide = false }: { wide?: boolean }) {
   useMeQuery(undefined, { skip: Boolean(user) })
 
   return (
-    <header className="border-b border-line bg-surface">
+    // `glass` rather than `glass-tint`: the header's dropdowns portal to
+    // `body`, so nothing inside it is positioned against it, and the wash it
+    // sits over is exactly the part of the canvas a blur has something to do
+    // with — the corner where the gradients are steepest.
+    <header className="border-b border-line bg-surface glass">
       <div
         className={`flex items-center gap-2 py-3 ${
           wide ? 'w-full px-4' : 'mx-auto max-w-3xl px-4'

@@ -339,7 +339,15 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex min-h-0 flex-col border-r border-line bg-surface">
+    /*
+      ⚠️ `glass-tint`, never `glass`. A `backdrop-filter` here would make this
+      element the containing block for `NodeMenu`'s panel, which is `fixed`
+      solely to escape the scroll container below — the menu would be clipped
+      again, on exactly the rows where it already was. There is nothing behind
+      the sidebar but the canvas wash anyway, so the blur would buy nothing for
+      the layer it costs.
+    */
+    <aside className="flex min-h-0 flex-col border-r border-line bg-surface glass-tint">
       <div className="flex items-center justify-between border-b border-line px-3 py-2">
         <h2 className="text-xs font-semibold tracking-wide text-fg-subtle uppercase">
           Collections

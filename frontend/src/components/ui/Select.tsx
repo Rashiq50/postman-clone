@@ -90,7 +90,7 @@ export function Select({
           // ⚠️ The height is capped by Radix's own available-height variable, not by a
           // fixed `max-h`: a fixed one clipped the last item's hint line even with
           // room to spare, and an uncapped one runs off the viewport on a long list.
-          className="z-50 max-h-[min(24rem,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-line bg-surface shadow-lg"
+          className="z-50 max-h-[min(24rem,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-line bg-surface shadow-lg glass"
         >
           <RadixSelect.ScrollUpButton className="flex justify-center py-1 text-xs text-fg-faint">
             ▴

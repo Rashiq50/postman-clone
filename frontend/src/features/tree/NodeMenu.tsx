@@ -113,7 +113,11 @@ export function NodeMenu({
           role="menu"
           style={{ position: 'fixed', top: anchor.top, left: anchor.left }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="z-50 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg"
+          // `glass` is safe on the panel itself — an element's own
+          // `backdrop-filter` does not affect where it is positioned, only
+          // where its *descendants* would be — and this is one of the few
+          // surfaces with real content passing behind it.
+          className="z-50 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg glass"
         >
           {items.map((item) => (
             <button

@@ -412,7 +412,7 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   trap, Escape and outside-press handling, scroll lock, focus restore, roving arrow-key focus,
   listbox typeahead, popper collision flipping and the ARIA wiring. ⚠️ **They
   ship no colours, and that is the entire reason they are allowed**: every pixel is still a
-  semantic token, so `yarn contrast` still audits these surfaces and a fifth theme is still one
+  semantic token, so `yarn contrast` still audits these surfaces and another theme is still one
   CSS block. **A styled kit (MUI, Ant) is the thing to reject in review** — it brings a second
   theming engine (emotion palette, cssinjs tokens) whose components sit outside the CSS that
   `check-contrast.mjs` parses, which turns "unchecked" into "unchecked and invisible".
@@ -436,7 +436,7 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
     straight after — which would cancel the navigation and look like a dead button.
   - **The prompt/confirm state in `Sidebar` holds callbacks**, and `setPrompt`/`setConfirm` are
     stable setters, so `handlers` stays memoized and no row re-renders when a dialog opens.
-  - `--on-danger` was added to all four themes for the destructive button (white fails on the
+  - `--on-danger` was added to every theme for the destructive button (white fails on the
     dark themes' lighter red, exactly as with `--on-accent`), plus two `PAIRS` entries — a token
     not in `PAIRS` is unchecked, not passing.
   - ⚠️ **`Dialog` restores focus itself and must keep doing so.** Call sites mount it
@@ -508,9 +508,9 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
 
 **Every colour is a semantic token.** Components say `bg-surface`, `text-fg-muted`,
 `border-line`, `ring-focus`, `text-method-get` — never `bg-white`, `text-slate-500` or
-`bg-indigo-600`. All four themes are blocks of custom properties in
+`bg-indigo-600`. All five themes are blocks of custom properties in
 [index.css](frontend/src/index.css) and nothing else, which is the invariant that makes a
-fifth theme one CSS block instead of a thirty-file audit.
+another theme one CSS block instead of a thirty-file audit.
 
 - ⚠️ **`@theme inline` is load-bearing.** It makes `bg-canvas` emit
   `background-color: var(--canvas)` instead of baking the value in at build time. Drop the
@@ -525,10 +525,46 @@ fifth theme one CSS block instead of a thirty-file audit.
   (including its `color-scheme`, which is what themes native form controls, scrollbars and
   the `<select>` popup) and an entry in
   [themes.ts](frontend/src/features/theme/themes.ts). If a third edit seems necessary, the
-  missing piece is a token.
+  missing piece is a token. `ThemeMenu` groups the picker by `appearance`, so a new theme
+  files itself under Light or Dark with no change there either.
+- **`glass` is the one thing a colour token could not express, and it is a vocabulary, not a
+  special case.** Three *effect* tokens sit beside the colours — `--canvas-image`,
+  `--glass-sheen`, `--glass-backdrop` — declared `none` on `:root` so every theme inherits
+  "off", and three opt-in utilities read them: `.glass` (sheen + backdrop blur),
+  `.glass-tint` (sheen only) and `.glass-scrim` (blur only, for the modal overlay). A call
+  site marked `glass` is therefore not glass-theme markup — it is a surface saying what kind
+  of surface it is, and any later theme picks it up for free. ⚠️ The defaults are `none` and
+  not a zero-strength value on purpose: `backdrop-filter: blur(0)` still promotes the element
+  and still creates a containing block, so a "zero" default would charge every theme for an
+  effect it does not use.
+  - ⚠️ **`backdrop-filter` makes an element a containing block for `position: fixed`
+    descendants**, which is the whole reason `.glass-tint` exists. The sidebar carries
+    `glass-tint`, never `glass`: `NodeMenu`'s panel is `fixed` *precisely* to escape the
+    sidebar's `overflow-y-auto` clip, and blurring the sidebar would re-anchor and re-clip it
+    — the exact bug the fixed positioning prevents, reintroduced from a stylesheet and
+    presenting as a dead ⋯ button. The panel's own `glass` is fine; an element's own filter
+    does not move the element.
+  - **Blur is spent only where content passes behind**: the dialog scrim and panel, the
+    `Select` popper, the `NodeMenu` panel, the header and the auth card. The editor's chrome
+    and its tab card sit on an opaque canvas, where a blur reveals nothing and costs a
+    compositing layer, so they take the sheen alone.
+  - ⚠️ **The canvas wash is load-bearing, not decoration.** Translucency over a flat colour is
+    just a different flat colour and blurring one is a no-op, so `--canvas-image` is what
+    makes the whole theme legible as glass. It is applied by a base rule that names `body`
+    **and the `.bg-canvas` utility** — the one place in `index.css` where a token cannot
+    reach on its own, because `bg-canvas` emits `background-color` only and every shell
+    paints the ground itself, so a wash on `body` alone would be covered and never seen.
+    `background-attachment: fixed` keeps nested canvases in register instead of each
+    restarting the gradient at its own corner.
 - **`yarn contrast` is the guard on all of that**
   ([check-contrast.mjs](frontend/scripts/check-contrast.mjs)). It parses the CSS rather than
-  importing it, composites alpha for the translucent soft fills, and exits non-zero. It
+  importing it, composites alpha against the real surface stack — `--surface` over
+  `--canvas`, every other fill over that composited surface — and exits non-zero. ⚠️ That
+  stack is not a detail now that a theme makes its *surfaces* translucent and not just its
+  badges: measuring a translucent white `--surface` against itself reports a near-white
+  backdrop, and the audit comes back confidently wrong rather than silent. It also does not
+  see `--canvas-image`, so a wash's own contribution is a hand check — the glass block
+  records its measured numbers. It
   caught four real failures on its first run — most importantly white-on-indigo-400 at
   2.98:1 on the dark theme's primary button, which is why the dark `--on-accent` is
   `#0f172a` and not white. **A token pair not listed in `PAIRS` is unchecked, not passing.**
@@ -641,11 +677,19 @@ Phases 1–3 are what make interactions instant regardless of size. The one meas
 deciding is already in the repo: `node backend/scripts/seed-tree.mjs <workspaceId>` fills a
 workspace with ~22k nodes and `--clean` removes them again.
 
-**Theming is complete on the client** and there is no server side to it. Four themes (Light,
-Dark, Midnight, Paper) plus System, a picker in the header and on both auth pages, and every
-component converted off Tailwind's palette onto semantic tokens — the conversion was the bulk
-of the work and is what keeps a fifth theme cheap. `yarn contrast` covers all four against
-WCAG AA. See *Theming* above for the traps.
+**Theming is complete on the client** and there is no server side to it. Five themes (Light,
+Dark, Midnight, Glass, Paper) plus System, a picker in the header and on both auth pages, and
+every component converted off Tailwind's palette onto semantic tokens — the conversion was the
+bulk of the work and is what keeps another theme cheap. `yarn contrast` covers all five
+against WCAG AA. See *Theming* above for the traps.
+
+**Glass** is the fifth, and the one that needed more than a block of colours: it re-uses
+midnight's neutrals, cyan accent and method hues, but its surfaces are translucent white over
+a washed canvas and its panels are frosted. That cost the effect-token vocabulary described
+under *Theming* and a `glass`/`glass-tint` class on the app chrome and the floating
+panels; it cost no new
+dependency, no JavaScript and no change to `theme.ts`, `ThemeMenu` or the pre-paint script in
+`index.html`.
 
 Deliberately **not** built for theming: the preference is **per browser, not per account** —
 putting it on the user row means a migration, a column, a DTO and a PATCH endpoint to make a

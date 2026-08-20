@@ -45,6 +45,12 @@ export const THEMES = [
     hint: 'True black with a cyan accent, for OLED displays.',
   },
   {
+    id: 'glass',
+    label: 'Glass',
+    appearance: 'dark',
+    hint: 'Midnight, behind frosted panels.',
+  },
+  {
     id: 'paper',
     label: 'Paper',
     appearance: 'light',

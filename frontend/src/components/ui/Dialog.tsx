@@ -9,7 +9,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
  * focus trap, Escape and outside-press handling, `aria-modal` wiring, scroll
  * lock, focus restore to the trigger, and the portal that escapes an
  * `overflow` ancestor. Every visible pixel below is a semantic token from
- * `index.css`, so `yarn contrast` still audits this surface and a fifth theme
+ * `index.css`, so `yarn contrast` still audits this surface and another theme
  * is still one CSS block. A styled kit (MUI, Ant) would have brought a second
  * theming engine and put its components outside that audit — see the note in
  * CLAUDE.md.
@@ -64,13 +64,17 @@ export function Dialog({
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
+        {/* The scrim is the one blur in the app with the whole app behind
+            it, which is why it takes `glass-scrim` (blur, no sheen) while the
+            panel above takes the sheen as well. Both are inert unless the
+            theme defines the effect tokens. */}
+        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-overlay glass-scrim" />
         <RadixDialog.Content
           // `top-1/2 -translate-y-1/2` rather than a flex-centred overlay: the
           // content is its own portal child, so it cannot be centred by the
           // overlay without nesting it — and nesting puts the outside-press
           // target inside the dialog.
-          className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg bg-surface p-4 shadow-xl outline-none"
+          className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg bg-surface p-4 shadow-xl outline-none glass"
         >
           <RadixDialog.Title className="text-sm font-medium text-fg">
             {title}

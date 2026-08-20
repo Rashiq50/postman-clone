@@ -170,7 +170,7 @@ const RegisterPage = () => {
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="rounded-lg border border-line bg-surface p-4 shadow-sm"
+          className="rounded-lg border border-line bg-surface p-4 shadow-sm glass"
         >
           <div className="flex flex-col gap-3">
             <div>

@@ -78,7 +78,7 @@ export function LoginPage() {
           // different voice from the API's field errors, and cannot be styled
           // or read by the same assistive tech. One error channel, not two.
           noValidate
-          className="rounded-lg border border-line bg-surface p-4 shadow-sm"
+          className="rounded-lg border border-line bg-surface p-4 shadow-sm glass"
         >
           <div className="flex flex-col gap-3">
             <div>

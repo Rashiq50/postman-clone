@@ -75,10 +75,32 @@ function luminance([r, g, b]) {
 }
 
 function contrast(foreground, background, base) {
-  const backdrop = composite(parseColour(background), parseColour(base))
+  const backdrop = composite(parseColour(background), base)
   const text = composite(parseColour(foreground), backdrop)
   const [lighter, darker] = [luminance(text), luminance(backdrop)].sort((a, b) => b - a)
   return (lighter + 0.05) / (darker + 0.05)
+}
+
+/**
+ * What is *behind* a token, which is the whole question once a theme makes its
+ * surfaces translucent rather than only its badges.
+ *
+ * The stack the app actually builds is two deep: `--canvas` is the opaque
+ * ground, `--surface` sits on the canvas, and every other fill — the soft
+ * badges, `--surface-muted`, `--surface-disabled` — sits on a surface. So
+ * `--surface` is composited over the canvas, and everything else over the
+ * *composited* surface.
+ *
+ * ⚠️ Compositing `--surface` over itself, as a single fixed base would, is not
+ * a small error in the glass theme: a translucent white surface measured
+ * against a white base reports a near-white backdrop, which turns every dark
+ * foreground into a comfortable pass and every light one into a failure. The
+ * audit would be confidently wrong rather than silent, which is worse.
+ */
+function baseFor(token, vars) {
+  const canvas = parseColour(vars['--canvas'])
+  if (token === '--canvas' || token === '--surface') return canvas
+  return composite(parseColour(vars['--surface']), canvas)
 }
 
 /**
@@ -134,9 +156,11 @@ for (const [name, vars] of Object.entries(themes)) {
       continue
     }
 
-    // Translucent fills are composited over `--surface`, the surface every
-    // soft badge and menu in this app actually sits on.
-    const ratio = contrast(vars[foreground], vars[background], vars['--surface'])
+    const ratio = contrast(
+      vars[foreground],
+      vars[background],
+      baseFor(background, vars),
+    )
     const ok = ratio >= minimum
     if (!ok) failures++
     console.log(

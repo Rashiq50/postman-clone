@@ -141,7 +141,7 @@ export function RequestEditor() {
   if (error || !request || !draft) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <div className="max-w-sm rounded-lg border border-line bg-surface p-6 text-center">
+        <div className="max-w-sm rounded-lg border border-line bg-surface p-6 text-center glass-tint">
           <p className="text-sm font-medium text-fg">Request unavailable</p>
           <p className="mt-1 text-sm text-fg-subtle">
             {errorMessage(error, 'This request could not be found.')}
@@ -197,7 +197,10 @@ export function RequestEditor() {
         />
       )}
 
-      <header className="space-y-2.5 border-b border-line bg-surface px-4 py-3">
+      {/* The pane's chrome and its card take `glass-tint`: they sit on an
+          opaque canvas, so there is nothing behind them a blur could reveal —
+          only the layer it would cost. */}
+      <header className="space-y-2.5 border-b border-line bg-surface px-4 py-3 glass-tint">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             {/*
@@ -300,7 +303,7 @@ export function RequestEditor() {
             scrolling; `shrink-0` keeps them from compressing instead, and a
             window narrow enough to overflow them scrolls at `<main>`, as it
             already did. */}
-        <Tabs.List className="flex shrink-0 gap-1 border-b border-line bg-surface px-4">
+        <Tabs.List className="flex shrink-0 gap-1 border-b border-line bg-surface px-4 glass-tint">
           {TABS.map((name) => (
             <Tabs.Trigger
               key={name}
@@ -322,7 +325,7 @@ export function RequestEditor() {
             background `yarn contrast` actually audits the foreground tokens
             against. */}
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          <div className="rounded-lg border border-line bg-surface p-4">
+          <div className="rounded-lg border border-line bg-surface p-4 glass-tint">
             <Tabs.Content value="Params" className="focus-visible:outline-none">
               <KeyValueEditor
                 entries={draft.queryParams}
@@ -368,7 +371,7 @@ function EditorSkeleton() {
     <div className="flex h-full flex-col bg-canvas" aria-busy>
       <span className="sr-only">Loading request…</span>
 
-      <div className="space-y-2.5 border-b border-line bg-surface px-4 py-3">
+      <div className="space-y-2.5 border-b border-line bg-surface px-4 py-3 glass-tint">
         <div className="h-4 w-32 animate-pulse rounded bg-surface-muted" />
         <div className="h-7 w-64 animate-pulse rounded bg-surface-muted" />
         <div className="flex gap-2">
@@ -378,14 +381,14 @@ function EditorSkeleton() {
         </div>
       </div>
 
-      <div className="flex gap-6 border-b border-line bg-surface px-4 py-3.5">
+      <div className="flex gap-6 border-b border-line bg-surface px-4 py-3.5 glass-tint">
         {TABS.map((name) => (
           <div key={name} className="h-4 w-14 animate-pulse rounded bg-surface-muted" />
         ))}
       </div>
 
       <div className="p-4">
-        <div className="h-48 animate-pulse rounded-lg border border-line bg-surface" />
+        <div className="h-48 animate-pulse rounded-lg border border-line bg-surface glass-tint" />
       </div>
     </div>
   )

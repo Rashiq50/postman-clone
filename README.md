@@ -427,16 +427,17 @@ rather than application state — see *Theming* below.)
 
 ### Theming
 
-Four themes ship — **Light**, **Dark**, **Midnight** (true black, cyan accent) and **Paper**
-(warm off-white, amber accent) — plus **System**, which follows `prefers-color-scheme` and
-keeps following it when the OS changes mid-session. The picker is in the header, and also on
+Five themes ship — **Light**, **Dark**, **Midnight** (true black, cyan accent), **Glass**
+(midnight's palette behind frosted panels) and **Paper** (warm off-white, amber accent) —
+plus **System**, which follows `prefers-color-scheme` and keeps following it when the OS
+changes mid-session. The picker is in the header, and also on
 `/login` and `/register`: a preference you cannot reach until after you have signed in is
 not really a preference.
 
 **Every colour in the app is a semantic token.** Components say `bg-surface`,
 `text-fg-subtle`, `border-line`, `text-method-get` — never `bg-white` or `text-slate-500`.
 A theme is then one block of custom properties in `frontend/src/index.css` and nothing else,
-which is the whole point: adding a fifth theme must not mean auditing thirty components.
+which is the whole point: adding a theme must not mean auditing thirty components.
 The `@theme inline` block that maps `--color-surface` to `--surface` is load-bearing —
 without `inline` Tailwind bakes the value in at build time and switching themes does nothing.
 
@@ -446,8 +447,32 @@ the rule is a convention rather than a compile error: **if a token is missing, a
 A palette utility that slips in pins that one element to light mode forever, and nobody
 notices until they switch themes.
 
-`yarn contrast` audits all four themes against WCAG AA — every foreground/background pair
-the components actually put together, with alpha composited for the translucent soft fills.
+**Glass is the one theme that needed more than colours**, and it is worth knowing why. A
+blur is not a colour, so no `bg-*` utility can carry one: a surface can say what it is
+*coloured* but not what it is *made of*. Three *effect* tokens sit beside the colour tokens
+for that — `--canvas-image`, `--glass-sheen`, `--glass-backdrop` — declared `none` on
+`:root`, so every other theme inherits "off", and three opt-in classes read them: `glass`
+(sheen and backdrop blur), `glass-tint` (sheen only) and `glass-scrim` (blur only, for the
+modal overlay). A surface marked `glass` is not glass-theme markup; it is a surface saying
+what kind of surface it is, which any later theme can pick up for free.
+
+Three things about it are easy to get wrong. Blur only earns its compositing layer where
+content actually passes behind — the modal scrim, the dropdowns, the kebab menu — so chrome
+that sits on an opaque canvas takes the sheen alone. `backdrop-filter` makes an element a
+containing block for `position: fixed` descendants, which is why the sidebar takes
+`glass-tint` and never `glass`: its kebab menu is `fixed` precisely to escape the sidebar's
+scroll clip, and blurring the sidebar would clip it again. And the canvas wash
+(`--canvas-image`) is load-bearing rather than decorative — translucency over a flat colour
+is just a different flat colour, and blurring a flat colour is a no-op, so removing the wash
+would switch the theme off while leaving every effect running.
+
+`yarn contrast` audits all five themes against WCAG AA — every foreground/background pair
+the components actually put together, with alpha composited against the real surface stack
+(`--surface` over `--canvas`, every other fill over that). The stack matters once a theme
+makes its surfaces translucent and not merely its badges: measured against itself, a
+translucent white surface reports a near-white backdrop and the audit comes back confidently
+wrong rather than silent. It does not see `--canvas-image`, so a wash is a hand check; the
+glass block in `index.css` records its measured numbers.
 It found four real failures on the first run, including white-on-indigo-400 at 2.98:1 in the
 dark theme's primary button, which is why `--on-accent` flips dark there. **Add the pair to
 `frontend/scripts/check-contrast.mjs` when you add a token combination** — an unlisted pair

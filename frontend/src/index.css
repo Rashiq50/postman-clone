@@ -143,6 +143,22 @@
   --method-patch: #6d28d9;
   --method-delete: #b91c1c;
   --method-other: #64748b;
+
+  /*
+   * Effects, not colours — and the only tokens here that are not one. A blur
+   * is not something a `bg-*` utility can carry, so the material a surface is
+   * made of needs its own vocabulary; see the `glass` utilities below.
+   *
+   * Every theme inherits these `none`s from `:root` and only `glass`
+   * overrides them, so an effect is *off* unless a theme opts in. ⚠️ `none`
+   * rather than a zero-strength value is the point: `backdrop-filter: blur(0)`
+   * still promotes the element to its own layer *and* still makes it a
+   * containing block for fixed descendants, so a "zero" default would cost
+   * every theme both.
+   */
+  --canvas-image: none;
+  --glass-sheen: none;
+  --glass-backdrop: none;
 }
 
 /*
@@ -262,6 +278,88 @@
 
 /*
  * ---------------------------------------------------------------------------
+ * glass — midnight's palette, behind frosted panels.
+ *
+ * The neutrals, the cyan accent and the method hues are midnight's; what
+ * changes is the *material*. Surfaces stop being flat fills and become
+ * translucent white at three opacities, and the hairlines become translucent
+ * white too — which is where a panel's lit rim comes from, at no extra token.
+ * Everything then composites over `--canvas` plus `--canvas-image`.
+ *
+ * ⚠️ **The wash is load-bearing, not decoration.** Translucency over a flat
+ * colour is just a different flat colour, and blurring a flat colour is a
+ * no-op — glass reads as glass only when there is structure behind it to bend.
+ * Deleting `--canvas-image` would not simplify this theme; it would switch it
+ * off while leaving every effect running and paid for.
+ *
+ * `yarn contrast` measures the tokens against `--canvas` alone, so the wash's
+ * own contribution is checked by hand. It peaks at 0.16 alpha of cyan in the
+ * top-left corner, which lifts that corner of the canvas from a luminance of
+ * 0.0022 to 0.0171 and leaves the three canvas pairs at fg 14.1:1, fg-subtle
+ * 6.5:1 and fg-faint 4.2:1 — all still clear of their targets. Brightening the
+ * wash is what would break them, and the audit will not catch it for you.
+ * ---------------------------------------------------------------------------
+ */
+:root[data-theme='glass'] {
+  color-scheme: dark;
+
+  --canvas: #04060c;
+  --canvas-image: radial-gradient(70rem 48rem at 8% -12%, rgb(34 211 238 / 0.16), transparent 62%), radial-gradient(60rem 44rem at 96% 4%, rgb(129 140 248 / 0.14), transparent 60%), radial-gradient(64rem 48rem at 46% 118%, rgb(56 189 248 / 0.12), transparent 58%);
+  --glass-sheen: linear-gradient(160deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.015) 45%, rgb(255 255 255 / 0.04));
+  --glass-backdrop: blur(18px) saturate(160%);
+
+  /* The surfaces are the theme: white at 7/11/20%, over the wash. */
+  --surface: rgb(233 240 255 / 0.07);
+  --surface-muted: rgb(233 240 255 / 0.11);
+  --surface-disabled: rgb(233 240 255 / 0.2);
+  /* Lighter than midnight's scrim because `.glass-scrim` blurs it as well —
+     an opaque-looking overlay would waste the one blur in the app that has
+     real depth behind it. */
+  --overlay: rgb(4 6 12 / 0.5);
+
+  --fg: #f0f3fa;
+  --fg-muted: #ccd3e2;
+  --fg-subtle: #9ea7bb;
+  --fg-faint: #7b8598;
+  --fg-disabled: #9ea7bb;
+  /* Dark text on a bright cyan fill, exactly as in midnight. */
+  --on-accent: #04121a;
+
+  /* Translucent, so a rim picks up whatever it is lit against rather than
+     drawing a grey line across the glass. */
+  --line-subtle: rgb(233 240 255 / 0.06);
+  --line: rgb(233 240 255 / 0.12);
+  --line-strong: rgb(233 240 255 / 0.22);
+
+  --accent: #22d3ee;
+  --accent-hover: #67e8f9;
+  --accent-soft: rgb(34 211 238 / 0.18);
+  --accent-soft-fg: #a5f3fc;
+  --focus: rgb(34 211 238 / 0.45);
+
+  --danger: #fb7185;
+  --on-danger: #1a0509;
+  --danger-hover: #fda4af;
+  --danger-soft: rgb(251 113 133 / 0.16);
+  --danger-soft-fg: #fda4af;
+  --danger-line: rgb(251 113 133 / 0.38);
+  --focus-danger: rgb(251 113 133 / 0.4);
+
+  --success-soft: rgb(74 222 128 / 0.16);
+  --success-soft-fg: #86efac;
+  --warning-soft: rgb(250 204 21 / 0.16);
+  --warning-soft-fg: #fde047;
+
+  --method-get: #4ade80;
+  --method-post: #fbbf24;
+  --method-put: #38bdf8;
+  --method-patch: #c084fc;
+  --method-delete: #fb7185;
+  --method-other: #9ea7bb;
+}
+
+/*
+ * ---------------------------------------------------------------------------
  * paper — a warm light theme. It exists to prove the token layer is not
  * secretly a light/dark boolean: it re-points the accent to amber and every
  * neutral to a warm grey without touching a single component.
@@ -314,6 +412,56 @@
   --method-other: #7a6c56;
 }
 
+/*
+ * ============================================================================
+ * The glass vocabulary
+ * ============================================================================
+ *
+ * Three opt-in classes, and the one thing in this file that is not a colour
+ * token. They exist because a blur is not a colour: `bg-surface` can say what
+ * a panel is *coloured*, and nothing could say what it is *made of*.
+ *
+ * They are inert in every theme that leaves the effect tokens at `none`, which
+ * is what keeps them out of the "adding a theme is one CSS block" rule: a call
+ * site marked `glass` is not glass-theme markup, it is a surface declaring
+ * what kind of surface it is, and any later theme can pick that up for free.
+ *
+ * ⚠️ **`backdrop-filter` makes an element a containing block for `position:
+ * fixed` descendants**, and that is the entire reason `.glass-tint` exists.
+ * The sidebar contains `NodeMenu`, whose panel is `fixed` *precisely* to
+ * escape the sidebar's `overflow-y-auto` clip; blurring the sidebar would
+ * re-anchor that panel to the sidebar and clip it again — the exact bug the
+ * fixed positioning is there to prevent, reintroduced from a stylesheet, and
+ * looking for all the world like a broken click handler. **Never put `.glass`
+ * on an ancestor of a fixed descendant.**
+ *
+ * The other half of the split is that a blur only earns its layer where
+ * content actually passes behind it: the modal scrim, a dropdown, the kebab
+ * menu. Chrome that sits on an opaque canvas has nothing behind it but the
+ * wash, and blurring a low-frequency gradient is invisible — so those get the
+ * sheen alone.
+ */
+
+/** Sheen + blur: floating layers with app content behind them. */
+@utility glass {
+  background-image: var(--glass-sheen);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+}
+
+/** Sheen alone: chrome pinned over the canvas, or any surface with a fixed
+ *  descendant it must not become the containing block for. */
+@utility glass-tint {
+  background-image: var(--glass-sheen);
+}
+
+/** Blur alone: the modal scrim, which wants the app behind it softened and
+ *  has no surface of its own to gloss. */
+@utility glass-scrim {
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+}
+
 @layer base {
   /*
    * The shells paint `bg-canvas` themselves, but the body needs it too: the
@@ -323,6 +471,24 @@
   body {
     background-color: var(--canvas);
     color: var(--fg);
+  }
+
+  /*
+   * ⚠️ The wash rides with the canvas *colour*, which means naming a utility
+   * class — the one place in this file where a token cannot reach on its own.
+   * `bg-canvas` emits `background-color` and nothing else, and every shell
+   * paints the ground itself, so a wash on `body` alone would be covered by
+   * the first opaque `bg-canvas` above it and never seen.
+   *
+   * `fixed` attachment is not a flourish either: it holds the wash still while
+   * a pane scrolls, and it keeps nested canvases (the request editor's, inside
+   * the workbench's) in register instead of each restarting the gradient at
+   * its own top-left corner, which would draw a visible seam down the pane.
+   */
+  body,
+  .bg-canvas {
+    background-image: var(--canvas-image);
+    background-attachment: fixed;
   }
 
   /*
