@@ -5,6 +5,7 @@ import {
   type KeyValueEntry,
   type RequestAuth,
   type RequestBody,
+  type RequestScripts,
 } from '@postman-clone/contracts';
 import { Transform } from 'class-transformer';
 import {
@@ -20,6 +21,7 @@ import {
   KeyValueEntriesConstraint,
   RequestAuthConstraint,
   RequestBodyConstraint,
+  RequestScriptsConstraint,
 } from './json-constraints';
 
 /** Trimmed *before* the emptiness check, matching `RegisterDto.name`. */
@@ -73,4 +75,9 @@ export class CreateRequestDto implements CreateApiRequestInput {
   @IsOptional()
   @Validate(RequestAuthConstraint)
   auth?: RequestAuth;
+
+  /** Sent whole, both slots at once — there is no partial script patch. */
+  @IsOptional()
+  @Validate(RequestScriptsConstraint)
+  scripts?: RequestScripts;
 }

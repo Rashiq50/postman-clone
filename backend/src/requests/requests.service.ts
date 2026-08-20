@@ -85,6 +85,7 @@ export class RequestsService {
           queryParams: input.queryParams ?? [],
           body: input.body ?? { mode: 'none' },
           auth: input.auth ?? { type: 'inherit' },
+          scripts: input.scripts ?? { preRequest: '', postRequest: '' },
           position,
         }),
       );

@@ -49,6 +49,27 @@ export type RequestBody =
   | { mode: 'json'; text: string }
   | { mode: 'form-urlencoded'; entries: KeyValueEntry[] };
 
+/**
+ * The two script slots that run around a send, stored whole as `jsonb` for the
+ * same reason as `body`: nothing filters or sorts on a script.
+ *
+ * Both fields are **required and default to the empty string**, not optional —
+ * an absent key and an empty script mean the same thing to every reader, and
+ * allowing both spellings would make every consumer write
+ * `scripts?.preRequest ?? ''`. The column default is the same empty pair.
+ *
+ * ⚠️ Nothing executes these yet. Sending a request is deliberately out of scope
+ * for this slice (see the README), so this is storage only — the strings
+ * round-trip and are never evaluated. When execution lands, the sandbox is the
+ * security surface, not this type.
+ */
+export interface RequestScripts {
+  /** Runs before the request is sent. */
+  preRequest: string;
+  /** Runs after the response arrives. */
+  postRequest: string;
+}
+
 export const REQUEST_AUTH_TYPES = [
   'inherit',
   'none',
@@ -85,6 +106,7 @@ export interface ApiRequest {
   queryParams: KeyValueEntry[];
   body: RequestBody;
   auth: RequestAuth;
+  scripts: RequestScripts;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -101,6 +123,7 @@ export interface CreateApiRequestInput {
   queryParams?: KeyValueEntry[];
   body?: RequestBody;
   auth?: RequestAuth;
+  scripts?: RequestScripts;
 }
 
 export type UpdateApiRequestInput = Partial<

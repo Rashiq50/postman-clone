@@ -118,6 +118,35 @@ export class RequestAuthConstraint implements ValidatorConstraintInterface {
   }
 }
 
+/**
+ * A `RequestScripts`: both slots required strings, and **no extra keys**.
+ *
+ * The exact-keys check is what makes a typo'd slot a 400 rather than a silently
+ * discarded script. `forbidNonWhitelisted` cannot see inside a jsonb value, so
+ * this constraint is the only thing standing between `{ preReqest: '…' }` and a
+ * save that reports success and stores nothing.
+ */
+export function isRequestScripts(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === 2 &&
+    isString(value.preRequest) &&
+    isString(value.postRequest)
+  );
+}
+
+@ValidatorConstraint({ name: 'requestScripts' })
+export class RequestScriptsConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    return isRequestScripts(value);
+  }
+
+  defaultMessage(): string {
+    return 'scripts must be an object with exactly { preRequest: string, postRequest: string }';
+  }
+}
+
 export function isEnvironmentVariables(value: unknown): boolean {
   return (
     Array.isArray(value) &&

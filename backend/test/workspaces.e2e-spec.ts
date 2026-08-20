@@ -807,6 +807,43 @@ describe('Workspaces, collections and requests (e2e)', () => {
         .expect(400);
     });
 
+    it('defaults scripts to the empty pair and round-trips an edit', async () => {
+      const created = await as(user)
+        .post('/api/v1/requests', { collectionId, name: 'scripted' })
+        .expect(201);
+
+      // The column default, visible to the client — not undefined, and not null.
+      expect(created.body).toMatchObject({
+        scripts: { preRequest: '', postRequest: '' },
+      });
+
+      const scripts = {
+        preRequest: "pm.environment.set('t', Date.now())",
+        postRequest: 'pm.test(() => {})',
+      };
+      const saved = await as(user)
+        .patch(`/api/v1/requests/${(created.body as { id: string }).id}`, {
+          scripts,
+        })
+        .expect(200);
+
+      expect(saved.body).toMatchObject({ scripts });
+    });
+
+    it('400s a scripts object with a mistyped slot rather than dropping it', async () => {
+      // `forbidNonWhitelisted` cannot see inside a jsonb value, so this is the
+      // constraint's job. Dropping it would report success and store nothing.
+      const res = await as(user)
+        .post('/api/v1/requests', {
+          collectionId,
+          name: 'x',
+          scripts: { preReqest: 'typo', postRequest: '' },
+        })
+        .expect(400);
+
+      expect(errorBody(res).details?.map((d) => d.field)).toContain('scripts');
+    });
+
     it('400s an unknown property rather than silently dropping it', async () => {
       await as(user)
         .post('/api/v1/requests', { collectionId, name: 'x', sneaky: true })

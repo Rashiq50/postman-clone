@@ -3,6 +3,7 @@ import type {
   KeyValueEntry,
   RequestAuth,
   RequestBody,
+  RequestScripts,
 } from '@postman-clone/contracts';
 import {
   Check,
@@ -103,6 +104,21 @@ export class RequestEntity {
 
   @Column({ type: 'jsonb', default: () => `'{"mode": "none"}'` })
   body: RequestBody;
+
+  /**
+   * The pre-request and post-response scripts. Storage only — nothing runs
+   * them yet; see `RequestScripts` in contracts.
+   *
+   * The default is spelled exactly as Postgres stores it — a space after
+   * *each* colon, and no `::jsonb` cast — for the reason given on `headers`
+   * above. A missing space here is not a runtime bug; it makes
+   * `migration:generate` propose the same no-op ALTER COLUMN forever.
+   */
+  @Column({
+    type: 'jsonb',
+    default: () => `'{"preRequest": "", "postRequest": ""}'`,
+  })
+  scripts: RequestScripts;
 
   /** ⚠️ Holds bearer tokens and passwords in plaintext. See the README. */
   @Column({ type: 'jsonb', default: () => `'{"type": "inherit"}'` })

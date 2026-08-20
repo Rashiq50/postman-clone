@@ -4,6 +4,7 @@ import type {
   KeyValueEntry,
   RequestAuth,
   RequestBody,
+  RequestScripts,
 } from '@postman-clone/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { RequestEntity } from '../entities/request.entity';
@@ -57,6 +58,9 @@ export class RequestResponseDto implements ApiRequest {
 
   @Expose()
   auth: RequestAuth;
+
+  @Expose()
+  scripts: RequestScripts;
 
   @Expose()
   position: number;

@@ -3,6 +3,7 @@ import {
   KeyValueEntriesConstraint,
   RequestAuthConstraint,
   RequestBodyConstraint,
+  RequestScriptsConstraint,
 } from './json-constraints';
 
 describe('RequestBodyConstraint', () => {
@@ -50,6 +51,51 @@ describe('RequestBodyConstraint', () => {
     // @ValidateNested union would emit a pile of overlapping complaints.
     expect(constraint.defaultMessage()).toContain('form-urlencoded');
     expect(constraint.defaultMessage()).toContain('body');
+  });
+});
+
+describe('RequestScriptsConstraint', () => {
+  const constraint = new RequestScriptsConstraint();
+
+  it.each([
+    [
+      'both slots empty, which is the column default',
+      { preRequest: '', postRequest: '' },
+    ],
+    ['both slots populated', { preRequest: 'pre()', postRequest: 'post()' }],
+  ])('accepts %s', (_label, value) => {
+    expect(constraint.validate(value)).toBe(true);
+  });
+
+  it.each([
+    ['a missing postRequest', { preRequest: '' }],
+    ['a missing preRequest', { postRequest: '' }],
+    ['an empty object', {}],
+    ['a non-string slot', { preRequest: 1, postRequest: '' }],
+    ['a null slot', { preRequest: null, postRequest: '' }],
+    ['null', null],
+    ['an array', []],
+    ['a string', 'pre()'],
+  ])('rejects %s', (_label, value) => {
+    expect(constraint.validate(value)).toBe(false);
+  });
+
+  it('rejects an unknown key rather than dropping it', () => {
+    // The load-bearing case. `forbidNonWhitelisted` cannot see inside a jsonb
+    // value, so without the exact-keys check a typo'd slot name would validate,
+    // save, and be silently discarded — the client would report success and the
+    // script would be gone.
+    expect(
+      constraint.validate({ preRequest: '', postRequest: '', preReqest: 'x' }),
+    ).toBe(false);
+    expect(constraint.validate({ preReqest: 'x', postRequest: '' })).toBe(
+      false,
+    );
+  });
+
+  it('produces one message naming both slots', () => {
+    expect(constraint.defaultMessage()).toContain('preRequest');
+    expect(constraint.defaultMessage()).toContain('postRequest');
   });
 });
 

@@ -5,10 +5,11 @@ import { AuthTab } from './AuthTab'
 import { BodyTab } from './BodyTab'
 import { KeyValueEditor } from './KeyValueEditor'
 import { RequestUrlBar } from './RequestUrlBar'
+import { ScriptsTab } from './ScriptsTab'
 import { useGetRequestQuery, useUpdateRequestMutation } from './requestsApi'
 import { useRequestDraft } from './useRequestDraft'
 
-const TABS = ['Params', 'Headers', 'Body', 'Auth'] as const
+const TABS = ['Params', 'Headers', 'Body', 'Auth', 'Scripts'] as const
 type Tab = (typeof TABS)[number]
 
 export function RequestEditor() {
@@ -157,6 +158,12 @@ export function RequestEditor() {
         )}
         {tab === 'Auth' && (
           <AuthTab auth={draft.auth} onChange={(auth) => patch({ auth })} />
+        )}
+        {tab === 'Scripts' && (
+          <ScriptsTab
+            scripts={draft.scripts}
+            onChange={(scripts) => patch({ scripts })}
+          />
         )}
       </div>
     </div>

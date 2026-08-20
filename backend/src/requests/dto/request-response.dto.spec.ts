@@ -14,6 +14,7 @@ const entity = (overrides: Partial<RequestEntity> = {}) =>
     queryParams: [],
     body: { mode: 'json', text: '{"a":1}' },
     auth: { type: 'bearer', token: 'secret' },
+    scripts: { preRequest: 'pre()', postRequest: 'post()' },
     position: 1024,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-02T00:00:00.000Z'),
@@ -39,6 +40,10 @@ describe('RequestResponseDto', () => {
     ]);
     expect(dto.body).toEqual({ mode: 'json', text: '{"a":1}' });
     expect(dto.auth).toEqual({ type: 'bearer', token: 'secret' });
+    expect(dto.scripts).toEqual({
+      preRequest: 'pre()',
+      postRequest: 'post()',
+    });
   });
 
   it('preserves an unusual auth shape rather than normalising it', () => {
@@ -82,6 +87,7 @@ describe('RequestResponseDto', () => {
         'name',
         'position',
         'queryParams',
+        'scripts',
         'updatedAt',
         'url',
       ].sort(),

@@ -238,6 +238,7 @@ describe('RequestsService', () => {
           url: '',
           body: { mode: 'none' },
           auth: { type: 'inherit' },
+          scripts: { preRequest: '', postRequest: '' },
           headers: [],
           queryParams: [],
           position: 1024,

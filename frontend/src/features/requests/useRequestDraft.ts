@@ -4,7 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 /** The editable subset of a request. Ids and timestamps are not draftable. */
 export type RequestDraft = Pick<
   ApiRequest,
-  'name' | 'method' | 'url' | 'description' | 'headers' | 'queryParams' | 'body' | 'auth'
+  | 'name'
+  | 'method'
+  | 'url'
+  | 'description'
+  | 'headers'
+  | 'queryParams'
+  | 'body'
+  | 'auth'
+  | 'scripts'
 >
 
 function toDraft(request: ApiRequest): RequestDraft {
@@ -17,6 +25,7 @@ function toDraft(request: ApiRequest): RequestDraft {
     queryParams: request.queryParams,
     body: request.body,
     auth: request.auth,
+    scripts: request.scripts,
   }
 }
 
