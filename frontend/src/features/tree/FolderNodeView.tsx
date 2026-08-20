@@ -1,29 +1,11 @@
 import type { FolderNode } from '@postman-clone/contracts'
+import { memo } from 'react'
 import { InlineRename } from './InlineRename'
-import { NodeMenu, type MenuItem } from './NodeMenu'
+import { NodeMenu } from './NodeMenu'
 import { Chevron, NodeRow } from './NodeRow'
 import { RequestNodeView } from './RequestNodeView'
-
-/** What every node view needs to render itself and its subtree. */
-export interface TreeHandlers {
-  isExpanded: (id: string) => boolean
-  toggle: (id: string) => void
-  renamingId: string | null
-  startRename: (id: string) => void
-  cancelRename: () => void
-  commitRename: (
-    kind: 'collection' | 'folder' | 'request',
-    id: string,
-    name: string,
-  ) => void
-  openRequest: (id: string) => void
-  activeRequestId?: string
-  menuFor: (
-    kind: 'collection' | 'folder' | 'request',
-    node: { id: string; name: string },
-    context: { collectionId: string; siblings: readonly { id: string }[] },
-  ) => MenuItem[]
-}
+import type { TreeHandlers } from './treeHandlers'
+import { useIsExpanded, useIsRenaming } from './treeUi'
 
 /**
  * Recursive: child folders first, then requests.
@@ -31,23 +13,28 @@ export interface TreeHandlers {
  * Folders and requests never interleave — they are two tables with two
  * independent position sequences, which is exactly what Postman does and what
  * removes the cross-table MAX(), lock and reindex from the backend.
+ *
+ * `memo` for the reason given on `CollectionNodeView`.
  */
-export function FolderNodeView({
+export const FolderNodeView = memo(function FolderNodeView({
   node,
   depth,
   collectionId,
-  siblings,
+  index,
+  siblingCount,
   handlers,
 }: {
   node: FolderNode
   depth: number
   collectionId: string
-  siblings: readonly { id: string }[]
+  index: number
+  siblingCount: number
   handlers: TreeHandlers
 }) {
-  const expanded = handlers.isExpanded(node.id)
+  const expanded = useIsExpanded(handlers.ui, node.id)
+  const renaming = useIsRenaming(handlers.ui, node.id)
 
-  if (handlers.renamingId === node.id) {
+  if (renaming) {
     return (
       <InlineRename
         initialValue={node.name}
@@ -62,17 +49,24 @@ export function FolderNodeView({
     <>
       <NodeRow
         depth={depth}
-        onClick={() => handlers.toggle(node.id)}
+        onClick={() => handlers.ui.toggle(node.id)}
         chevron={
           <Chevron
             expanded={expanded}
-            onToggle={() => handlers.toggle(node.id)}
+            onToggle={() => handlers.ui.toggle(node.id)}
             label={node.name}
           />
         }
         menu={
           <NodeMenu
-            items={handlers.menuFor('folder', node, { collectionId, siblings })}
+            getItems={() =>
+              handlers.menuFor('folder', node, {
+                collectionId,
+                index,
+                siblingCount,
+                parentId: node.parentFolderId,
+              })
+            }
             label={node.name}
           />
         }
@@ -82,32 +76,26 @@ export function FolderNodeView({
 
       {expanded && (
         <>
-          {node.folders.map((child) => (
+          {node.folders.map((child, at) => (
             <FolderNodeView
               key={child.id}
               node={child}
               depth={depth + 1}
               collectionId={collectionId}
-              siblings={node.folders}
+              index={at}
+              siblingCount={node.folders.length}
               handlers={handlers}
             />
           ))}
-          {node.requests.map((request) => (
+          {node.requests.map((request, at) => (
             <RequestNodeView
               key={request.id}
               node={request}
               depth={depth + 1}
-              isActive={handlers.activeRequestId === request.id}
-              isRenaming={handlers.renamingId === request.id}
-              onOpen={() => handlers.openRequest(request.id)}
-              onRename={(name) =>
-                handlers.commitRename('request', request.id, name)
-              }
-              onCancelRename={handlers.cancelRename}
-              menuItems={handlers.menuFor('request', request, {
-                collectionId,
-                siblings: node.requests,
-              })}
+              collectionId={collectionId}
+              index={at}
+              siblingCount={node.requests.length}
+              handlers={handlers}
             />
           ))}
           {node.folders.length === 0 && node.requests.length === 0 && (
@@ -122,4 +110,4 @@ export function FolderNodeView({
       )}
     </>
   )
-}
+})

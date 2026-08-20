@@ -5,9 +5,13 @@ import type {
   UpdateFolderInput,
 } from '@postman-clone/contracts'
 import { baseApi } from '../../app/baseApi'
-import { treeTag } from '../tree/treeApi'
+import { insertFolder, moveNode, removeNode, renameNode } from '../tree/treeCache'
+import { patchTree, resyncTree } from '../tree/treePatch'
 
-/** `workspaceId` is the invalidation key — see `collectionsApi`. */
+/**
+ * `workspaceId` is the cache-patch key — see the long note in
+ * `collectionsApi`, including why rename undoes and move/delete resync.
+ */
 export const foldersApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     createFolder: builder.mutation<
@@ -19,7 +23,14 @@ export const foldersApi = baseApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: (_r, _e, { workspaceId }) => treeTag(workspaceId),
+      async onQueryStarted({ workspaceId }, api) {
+        try {
+          const { data } = await api.queryFulfilled
+          patchTree(api, workspaceId, (draft) => insertFolder(draft, data))
+        } catch {
+          // Nothing was patched; the mutation's error state is the report.
+        }
+      },
     }),
 
     updateFolder: builder.mutation<
@@ -31,7 +42,18 @@ export const foldersApi = baseApi.injectEndpoints({
         method: 'PATCH',
         body: changes,
       }),
-      invalidatesTags: (_r, _e, { workspaceId }) => treeTag(workspaceId),
+      async onQueryStarted({ id, workspaceId, changes }, api) {
+        if (changes.name === undefined) return
+        const name = changes.name
+        const patch = patchTree(api, workspaceId, (draft) =>
+          renameNode(draft, id, name),
+        )
+        try {
+          await api.queryFulfilled
+        } catch {
+          patch.undo()
+        }
+      },
     }),
 
     moveFolder: builder.mutation<
@@ -43,12 +65,39 @@ export const foldersApi = baseApi.injectEndpoints({
         method: 'PATCH',
         body,
       }),
-      invalidatesTags: (_r, _e, { workspaceId }) => treeTag(workspaceId),
+      // A folder never changes collection (the composite FK makes that
+      // unrepresentable), so a null `parentFolderId` means the root of the
+      // collection it is already in — which is exactly what `{ kind: 'root' }`
+      // resolves against.
+      async onQueryStarted({ id, workspaceId, parentFolderId, index }, api) {
+        patchTree(api, workspaceId, (draft) =>
+          moveNode(
+            draft,
+            id,
+            parentFolderId ? { kind: 'folder', folderId: parentFolderId } : { kind: 'root' },
+            index,
+          ),
+        )
+        try {
+          await api.queryFulfilled
+        } catch {
+          resyncTree(api, workspaceId)
+        }
+      },
     }),
 
     deleteFolder: builder.mutation<void, { id: string; workspaceId: string }>({
       query: ({ id }) => ({ url: `folders/${id}`, method: 'DELETE' }),
-      invalidatesTags: (_r, _e, { workspaceId }) => treeTag(workspaceId),
+      async onQueryStarted({ id, workspaceId }, api) {
+        patchTree(api, workspaceId, (draft) => {
+          removeNode(draft, id)
+        })
+        try {
+          await api.queryFulfilled
+        } catch {
+          resyncTree(api, workspaceId)
+        }
+      },
     }),
   }),
 })

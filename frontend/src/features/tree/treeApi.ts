@@ -7,6 +7,14 @@ import { baseApi } from '../../app/baseApi'
  * — and a move between collections would force the client to know both
  * collection ids. Per-workspace is exactly as precise as the transport allows
  * and strictly simpler.
+ *
+ * ⚠️ **Mutations no longer invalidate this tag on the happy path.** They patch
+ * the cached tree directly (`features/tree/treeCache.ts`, dispatched from each
+ * mutation's `onQueryStarted` via `treePatch.ts`), because a refetch of the
+ * whole workspace after every rename, move and delete is a visible stall once a
+ * workspace has hundreds of collections. The tag still has two jobs and must
+ * not be deleted: it is the rollback for a failed structural edit, and it is
+ * what `refetchOnFocus` reconciles against.
  */
 export const treeApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -21,6 +29,6 @@ export const treeApi = baseApi.injectEndpoints({
 
 export const { useGetTreeQuery } = treeApi
 
-/** The invalidation every mutation in this feature reaches for. */
+/** The error-path resync — see the note above; no longer a per-mutation tag. */
 export const treeTag = (workspaceId: string) =>
   [{ type: 'Tree' as const, id: workspaceId }] as const

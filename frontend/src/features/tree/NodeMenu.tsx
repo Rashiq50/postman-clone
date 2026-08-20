@@ -21,11 +21,24 @@ export interface MenuItem {
  * row then runs off the *viewport* instead, which hides the bottom items just
  * as effectively. So the panel is measured once mounted and flipped above its
  * button when there is no room below — see the layout effect.
+ *
+ * ⚠️ The items arrive as a **thunk**, not as an array. Building them is what
+ * every mounted row used to do on every render — a `MenuItem[]` with its
+ * closures, thousands of times over, for a menu at most one row has open — and
+ * it also dragged the whole tree into the row's memoization equation. The thunk
+ * is called once, when the ⋯ button opens the panel.
  */
-export function NodeMenu({ items, label }: { items: MenuItem[]; label: string }) {
+export function NodeMenu({
+  getItems,
+  label,
+}: {
+  getItems: () => MenuItem[]
+  label: string
+}) {
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null)
+  const [items, setItems] = useState<MenuItem[]>([])
 
   // Measured after mount rather than estimated from `items.length`: the count
   // is not the only thing setting the height, and a guess wrong by one row puts
@@ -73,6 +86,7 @@ export function NodeMenu({ items, label }: { items: MenuItem[]; label: string })
   const open = () => {
     const rect = buttonRef.current?.getBoundingClientRect()
     if (!rect) return
+    setItems(getItems())
     setAnchor({ top: rect.bottom + 4, left: rect.right - 176 })
   }
 

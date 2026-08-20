@@ -306,14 +306,36 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   `WorkbenchShell` so the sidebar never mounts against a foreign id, and it lets the route
   through when the workspace list itself failed to load (a failed list is not evidence the id is
   wrong, and `/` would hit the same failure).
-- **One `Tree` tag per workspace.** The tree is a single HTTP response, so a per-collection tag
-  could never cause a partial refetch. ⚠️ **Every mutation argument carries `workspaceId` even
-  though the server ignores it** — it is the invalidation key and there is no other way to
-  reach one from a mutation. Forgetting it presents as "the sidebar doesn't update until I
-  reload", which reads like a caching bug.
-- ⚠️ **`updateRequest` invalidates `Tree` only when `name` or `method` is in the patch.** They
-  are all the sidebar renders; invalidating on every save refetches the whole workspace each
-  time someone edits a header.
+- **The sidebar cache is patched, not refetched.** Every structural mutation writes the change
+  straight into the cached `WorkspaceTree` from its `onQueryStarted`, via the pure helpers in
+  [treeCache.ts](frontend/src/features/tree/treeCache.ts) and the two dispatch wrappers in
+  [treePatch.ts](frontend/src/features/tree/treePatch.ts). A refetch of the whole workspace after
+  every rename/move/delete is a visible stall once a workspace has hundreds of collections.
+  - **Optimistic** (patch first, then send): rename, delete, move/reorder, and a request's
+    `method`. **Response-patched** (await `queryFulfilled`, insert the returned DTO): the three
+    creates — they need the server's `id` and `position`. No temp-id inserts; deliberate.
+  - ⚠️ **Two rollbacks, on purpose.** Rename does `patch.undo()`. Structural ops instead
+    `invalidateTags(treeTag(ws))` — an `undo()` applied after other patches, or after a focus
+    refetch swapped the cache object, can mis-apply, and the error path is where one full fetch
+    is fine.
+  - ⚠️ **The helpers are total and silent**: a missing id is a no-op, never a throw. A stale
+    cache is legitimate (another tab, another member) and the reconcile is what fixes it.
+  - ⚠️ **Array order is the render order; nothing re-sorts on `position`.** `positionForMove`
+    renumbers a whole sibling set when the 1024 gap runs out, so patched positions go stale while
+    the order stays right. Move splices by index.
+- **One `Tree` tag per workspace, and it still exists** — now serving exactly two jobs: the
+  error-path resync above, and the focus reconcile below. ⚠️ **Every mutation argument still
+  carries `workspaceId` even though the server ignores it** — it is no longer the invalidation
+  key but the *patch* key, since `updateQueryData` needs the exact query argument. Forgetting it
+  presents as "the sidebar doesn't update until I reload".
+- ⚠️ **`updateRequest` patches the tree only when `name` or `method` is in the changes**, and
+  keeps its `Request:id` invalidation always. Those two fields are all the sidebar renders; every
+  other save (a header, a body, a script) must not touch tree state at all.
+- **Tabs converge on focus, never by push.** `setupListeners` is called in `app/store.ts` and
+  `getTree` alone opts into `refetchOnFocus` / `refetchOnReconnect` (per-endpoint, at the hook in
+  `Sidebar` — not globally, or the request editor's draft behaviour changes too). An edit in tab A
+  appears in tab B when B is next focused. **No `BroadcastChannel`, no `storage` events, no
+  socket** — same doctrine as auth, and nothing new in `localStorage`.
 - ⚠️ **`useRequestDraft` keys its seeding effect on `request?.id`, never `request`.** RTK Query
   returns a new object identity on every background refetch, so depending on the object wipes
   whatever the user was typing — intermittent, and presents as a dropped keystroke. There is no
@@ -323,12 +345,28 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   absolutely-positioned menu on a bottom row is clipped and invisible; escaping that clip then
   lets it run off the *viewport*, which hides the bottom items just as well. Both halves are
   needed — the second was found by running the app, not by reading it.
-- `useExpanded` holds one `Set` at `Sidebar` level, not per node (collapsing a parent unmounts
-  its children, so reopening would reset every grandchild) and not in Redux. It resets on
-  reload; that is accepted.
-- **One optimistic update, and only one: inline rename**, via `treeApi.util.updateQueryData`
-  with `patch.undo()` in the catch. It is the only operation whose round trip is a visible
-  flicker on the element the user is looking at. Everything else refetches.
+- ⚠️ **The sidebar's view state is an external store, not React state.**
+  [treeUi.ts](frontend/src/features/tree/treeUi.ts) holds expansion (one `Set`), the node being
+  renamed and the active request id, and each row subscribes for itself with
+  `useSyncExternalStore`. This is purely about render cost and is the whole reason `useExpanded`
+  is gone: with thousands of mounted rows, any of those three values held in `Sidebar` re-renders
+  *every* row on every chevron click, because whatever prop or context carries the value down
+  changes identity and defeats `React.memo` on everything in between. The store's identity never
+  changes, so a toggle re-renders the toggled row and the subtree it mounts, and nothing else.
+  It is still not Redux (an action per chevron click for state nothing outside the sidebar reads)
+  and still not persisted (expansion resets on reload — accepted).
+- ⚠️ **The three node views are `React.memo`'d and their props must stay referentially stable.**
+  `Sidebar` builds the `TreeHandlers` object with `useMemo` over stable deps only; `tree` and
+  `requestId` reach `menuFor` through a **ref**, because closing over them would give `handlers` a
+  new identity on every refetch and every navigation — which re-renders every row and undoes the
+  memoization entirely. A row's slot among its siblings is passed as `index` + `siblingCount`,
+  never as the sibling array: a patch gives every array on the path to it a new identity, so an
+  array prop would fail the memo comparison on all 500 collection rows for an edit inside one.
+- ⚠️ **`NodeMenu` takes a `getItems` thunk, not a `MenuItem[]`,** and calls it when the ⋯ button
+  opens. Building the array during render meant one allocation per mounted row per render for a
+  menu at most one row has open, and it dragged the whole tree into each row's memo equation.
+  Reorder gets the node's current parent from `MenuContext.parentId` (i.e. from the node itself)
+  rather than by walking the tree for it.
 - No icon library and no editor library — text glyphs (`▸ ▾ ⋯`) and a plain `<textarea>` with a
   Format JSON button. Both are dependency decisions belonging to the execution slice.
 - **No Send button, not even a disabled one.** Deliberate; see `RequestUrlBar.tsx`.
@@ -458,6 +496,18 @@ tenancy* above for the rules and *Frontend workbench rules* for the client. Unit
 ordering, the scope fragments, provisioning, `build-tree`, the folder cycle check, the requests
 service and the jsonb constraints; `backend/test/workspaces.e2e-spec.ts` covers the API end to
 end, including cross-tenant isolation and the `VIEWER` role seam.
+
+**Phases 1–3 of [TREE_SCALE_PLAN.md](TREE_SCALE_PLAN.md) have shipped** — memoized node views
+over a `useSyncExternalStore` UI store, cache patching in place of tree invalidation, and a
+focus/reconnect reconcile on `getTree`. It is a frontend-only change: no endpoint, contract or
+DTO moved. See *Frontend workbench rules* for the resulting invariants.
+
+**Phase 4 (lazy per-collection subtrees with hover prefetch) is deliberately not built.** The
+plan gates it on workspaces actually approaching hundreds of collections, and it is the only
+phase that costs a backend route, a contract change and a second data path for `MoveToDialog`;
+Phases 1–3 are what make interactions instant regardless of size. The one measurement tool for
+deciding is already in the repo: `node backend/scripts/seed-tree.mjs <workspaceId>` fills a
+workspace with ~22k nodes and `--clean` removes them again.
 
 **Theming is complete on the client** and there is no server side to it. Four themes (Light,
 Dark, Midnight, Paper) plus System, a picker in the header and on both auth pages, and every

@@ -1,12 +1,5 @@
-import type {
-  CollectionNode,
-  FolderNode,
-  RequestNode,
-  WorkspaceTree,
-} from '@postman-clone/contracts'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { useAppDispatch } from '../../app/hooks'
 import { errorMessage } from '../../lib/api-error'
 import {
   useCreateCollectionMutation,
@@ -27,39 +20,13 @@ import {
   useUpdateRequestMutation,
 } from '../requests/requestsApi'
 import { CollectionNodeView } from './CollectionNodeView'
-import type { TreeHandlers } from './FolderNodeView'
 import { MoveToDialog } from './MoveToDialog'
 import { moveTargets, type MoveTarget } from './moveTargets'
 import type { MenuItem } from './NodeMenu'
-import { treeApi, useGetTreeQuery } from './treeApi'
-import { useExpanded } from './useExpanded'
-
-type NodeKind = 'collection' | 'folder' | 'request'
-
-/** The ancestor chain of a request, so a deep link opens visible. */
-function ancestorsOf(tree: WorkspaceTree | undefined, requestId: string): string[] {
-  if (!tree) return []
-
-  const walkFolders = (
-    folders: readonly FolderNode[],
-    trail: string[],
-  ): string[] | null => {
-    for (const folder of folders) {
-      const here = [...trail, folder.id]
-      if (folder.requests.some((r) => r.id === requestId)) return here
-      const deeper = walkFolders(folder.folders, here)
-      if (deeper) return deeper
-    }
-    return null
-  }
-
-  for (const collection of tree.collections) {
-    if (collection.requests.some((r) => r.id === requestId)) return [collection.id]
-    const inFolders = walkFolders(collection.folders, [collection.id])
-    if (inFolders) return inFolders
-  }
-  return []
-}
+import { ancestorsOf, subtreeContains } from './treeCache'
+import type { MenuContext, NodeKind, TreeHandlers } from './treeHandlers'
+import { useGetTreeQuery } from './treeApi'
+import { useTreeUiStore } from './treeUi'
 
 interface MoveDialogState {
   kind: 'folder' | 'request'
@@ -74,14 +41,25 @@ export function Sidebar() {
     requestId?: string
   }>()
   const navigate = useNavigate()
-  const dispatch = useAppDispatch()
 
-  const { data: tree, isLoading, error } = useGetTreeQuery(workspaceId!, {
+  const {
+    data: tree,
+    isLoading,
+    error,
+  } = useGetTreeQuery(workspaceId!, {
     skip: !workspaceId,
+    // ⚠️ Scoped to this endpoint, not switched on globally. Structural edits
+    // now patch the cache instead of refetching, so the cache can drift —
+    // another tab, another workspace member, or the backend renumbering a
+    // sibling set. Focus is the right moment to true it up: a hidden tab's
+    // staleness is invisible by definition, and the instant a user *sees* a tab
+    // is the instant it refetches. There is deliberately no push channel — no
+    // `BroadcastChannel`, no socket — for the same reason auth has none.
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
   })
 
-  const { isExpanded, toggle, expandAll } = useExpanded()
-  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const ui = useTreeUiStore()
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null)
 
   const [createCollection] = useCreateCollectionMutation()
@@ -97,210 +75,194 @@ export function Sidebar() {
   const [moveRequest] = useMoveRequestMutation()
   const [deleteRequest] = useDeleteRequestMutation()
 
+  /**
+   * ⚠️ The tree and the active request id reach the menu through a **ref**, not
+   * through the `handlers` closure. `menuFor` needs both — to decide whether a
+   * delete orphans the open request — but it runs at menu-open time, long after
+   * render, and closing over them would give `handlers` a new identity on every
+   * refetch and every navigation, re-rendering every mounted row. The ref is
+   * always current by the time anyone clicks.
+   */
+  const latest = useRef({ tree, requestId })
+  latest.current = { tree, requestId }
+
+  // The highlight lives in the UI store so a navigation re-renders the two rows
+  // whose highlight actually moved, rather than the whole tree. Layout effect,
+  // not effect: it must land before paint or the old row stays lit for a frame.
+  useLayoutEffect(() => ui.setActiveRequest(requestId), [ui, requestId])
+
   // Open the active request's ancestors once the tree arrives, so a deep link
   // or a reload lands with the request visible rather than buried.
   const ancestors = useMemo(
     () => (requestId ? ancestorsOf(tree, requestId) : []),
     [tree, requestId],
   )
-  useEffect(() => expandAll(ancestors), [ancestors, expandAll])
-
-  if (!workspaceId) return null
+  useEffect(() => ui.expandAll(ancestors), [ui, ancestors])
 
   const ws = workspaceId
 
   /**
-   * Inline rename is the **only** optimistic update in this feature, and
-   * deliberately so: it is the one operation where the round trip is a visible
-   * flicker on the exact element the user is looking at. Everything else
-   * refetches — gold-plating the rest would buy nothing and cost a rollback
-   * path per mutation.
+   * ⚠️ Memoized, and the memo is load-bearing: every node view is `React.memo`'d
+   * on this object. Its dependencies are all stable for the lifetime of the
+   * sidebar — RTK Query mutation triggers, `navigate`, the UI store — so it is
+   * built once per workspace and a cache patch re-renders only the rows whose
+   * own slice of the tree changed.
    */
-  async function commitRename(kind: NodeKind, id: string, name: string) {
-    setRenamingId(null)
+  const handlers = useMemo<TreeHandlers>(() => {
+    const rename = (kind: NodeKind, id: string, name: string) => {
+      // Optimistic, and the rollback is `patch.undo()` — see the mutations. The
+      // patch lives there rather than here so that every call site gets it.
+      ui.startRename(null)
+      if (kind === 'collection') {
+        void updateCollection({ id, workspaceId: ws!, changes: { name } })
+      } else if (kind === 'folder') {
+        void updateFolder({ id, workspaceId: ws!, changes: { name } })
+      } else {
+        void updateRequest({ id, workspaceId: ws!, changes: { name } })
+      }
+    }
 
-    const patch = dispatch(
-      treeApi.util.updateQueryData('getTree', ws, (draft) => {
-        const renameIn = (nodes: { id: string; name: string }[]) => {
-          const found = nodes.find((n) => n.id === id)
-          if (found) found.name = name
-          return Boolean(found)
+    const menuFor = (
+      kind: NodeKind,
+      node: { id: string; name: string },
+      context: MenuContext,
+    ): MenuItem[] => {
+      const { index } = context
+      const canUp = index > 0
+      const canDown = index < context.siblingCount - 1
+
+      const reorder = (delta: number) => {
+        const target = index + delta
+        if (kind === 'collection') {
+          void moveCollection({ id: node.id, workspaceId: ws!, index: target })
+        } else if (kind === 'folder') {
+          void moveFolder({
+            id: node.id,
+            workspaceId: ws!,
+            parentFolderId: context.parentId,
+            index: target,
+          })
+        } else {
+          void moveRequest({
+            id: node.id,
+            workspaceId: ws!,
+            folderId: context.parentId,
+            index: target,
+          })
         }
-        const walk = (folders: FolderNode[]): boolean => {
-          for (const folder of folders) {
-            if (folder.id === id) {
-              folder.name = name
-              return true
-            }
-            if (renameIn(folder.requests)) return true
-            if (walk(folder.folders)) return true
-          }
-          return false
-        }
-        for (const collection of draft.collections as CollectionNode[]) {
-          if (collection.id === id) {
-            collection.name = name
+      }
+
+      const items: MenuItem[] = [
+        { label: 'Rename', onSelect: () => ui.startRename(node.id) },
+      ]
+
+      if (kind !== 'request') {
+        items.push({
+          label: 'New folder',
+          onSelect: () => {
+            const name = window.prompt('Folder name', 'New folder')?.trim()
+            if (!name) return
+            void createFolder({
+              workspaceId: ws!,
+              collectionId: context.collectionId,
+              parentFolderId: kind === 'folder' ? node.id : null,
+              name,
+            })
+            ui.expandAll([node.id])
+          },
+        })
+        items.push({
+          label: 'New request',
+          onSelect: () => {
+            const name = window.prompt('Request name', 'New request')?.trim()
+            if (!name) return
+            void createRequest({
+              workspaceId: ws!,
+              collectionId: context.collectionId,
+              folderId: kind === 'folder' ? node.id : null,
+              name,
+            })
+            ui.expandAll([node.id])
+          },
+        })
+      }
+
+      items.push({ label: 'Move up', onSelect: () => reorder(-1), disabled: !canUp })
+      items.push({
+        label: 'Move down',
+        onSelect: () => reorder(1),
+        disabled: !canDown,
+      })
+
+      if (kind !== 'collection') {
+        items.push({
+          label: 'Move to…',
+          onSelect: () =>
+            setMoveDialog({
+              kind,
+              node,
+              currentParentId: context.parentId,
+              excludeSubtreeOf: kind === 'folder' ? node.id : undefined,
+            }),
+        })
+      }
+
+      items.push({
+        label: 'Delete',
+        danger: true,
+        onSelect: () => {
+          // `window.confirm` for now, and saying so plainly: a real dialog with
+          // focus management is deferred, not forgotten.
+          if (!window.confirm(`Delete “${node.name}”? This cannot be undone.`)) {
             return
           }
-          if (renameIn(collection.requests)) return
-          if (walk(collection.folders)) return
-        }
-      }),
-    )
+          // Read *before* the mutation: its optimistic patch removes the
+          // subtree from the cache, so asking afterwards always answers "no".
+          const orphansOpenRequest =
+            latest.current.requestId !== undefined &&
+            subtreeContains(latest.current.tree, node.id, latest.current.requestId)
 
-    try {
-      if (kind === 'collection') {
-        await updateCollection({ id, workspaceId: ws, changes: { name } }).unwrap()
-      } else if (kind === 'folder') {
-        await updateFolder({ id, workspaceId: ws, changes: { name } }).unwrap()
-      } else {
-        await updateRequest({ id, workspaceId: ws, changes: { name } }).unwrap()
-      }
-    } catch {
-      // The server rejected it — put the old name back rather than leaving the
-      // sidebar showing an edit that never landed.
-      patch.undo()
-    }
-  }
-
-  function menuFor(
-    kind: NodeKind,
-    node: { id: string; name: string },
-    context: { collectionId: string; siblings: readonly { id: string }[] },
-  ): MenuItem[] {
-    const index = context.siblings.findIndex((s) => s.id === node.id)
-    const canUp = index > 0
-    const canDown = index >= 0 && index < context.siblings.length - 1
-
-    const reorder = (delta: number) => {
-      const target = index + delta
-      if (kind === 'collection') {
-        void moveCollection({ id: node.id, workspaceId: ws, index: target })
-        return
-      }
-      if (kind === 'folder') {
-        const folder = findFolder(tree, node.id)
-        void moveFolder({
-          id: node.id,
-          workspaceId: ws,
-          parentFolderId: folder?.parentFolderId ?? null,
-          index: target,
-        })
-        return
-      }
-      const request = findRequest(tree, node.id)
-      void moveRequest({
-        id: node.id,
-        workspaceId: ws,
-        folderId: request?.folderId ?? null,
-        index: target,
-      })
-    }
-
-    const items: MenuItem[] = [
-      { label: 'Rename', onSelect: () => setRenamingId(node.id) },
-    ]
-
-    if (kind !== 'request') {
-      items.push({
-        label: 'New folder',
-        onSelect: () => {
-          const name = window.prompt('Folder name', 'New folder')?.trim()
-          if (!name) return
-          void createFolder({
-            workspaceId: ws,
-            collectionId: context.collectionId,
-            parentFolderId: kind === 'folder' ? node.id : null,
-            name,
-          })
-          toggle(node.id)
-        },
-      })
-      items.push({
-        label: 'New request',
-        onSelect: () => {
-          const name = window.prompt('Request name', 'New request')?.trim()
-          if (!name) return
-          void createRequest({
-            workspaceId: ws,
-            collectionId: context.collectionId,
-            folderId: kind === 'folder' ? node.id : null,
-            name,
-          })
-          toggle(node.id)
-        },
-      })
-    }
-
-    items.push({ label: 'Move up', onSelect: () => reorder(-1), disabled: !canUp })
-    items.push({
-      label: 'Move down',
-      onSelect: () => reorder(1),
-      disabled: !canDown,
-    })
-
-    if (kind !== 'collection') {
-      items.push({
-        label: 'Move to…',
-        onSelect: () => {
-          if (kind === 'folder') {
-            const folder = findFolder(tree, node.id)
-            setMoveDialog({
-              kind,
-              node,
-              currentParentId: folder?.parentFolderId ?? null,
-              excludeSubtreeOf: node.id,
-            })
+          if (kind === 'collection') {
+            void deleteCollection({ id: node.id, workspaceId: ws! })
+          } else if (kind === 'folder') {
+            void deleteFolder({ id: node.id, workspaceId: ws! })
           } else {
-            const request = findRequest(tree, node.id)
-            setMoveDialog({
-              kind,
-              node,
-              currentParentId: request?.folderId ?? null,
-            })
+            void deleteRequest({ id: node.id, workspaceId: ws! })
           }
+          // If the open request just went away — directly or with its parent —
+          // fall back to the empty state rather than leaving a stale pane.
+          if (orphansOpenRequest) void navigate(`/w/${ws}`, { replace: true })
         },
       })
+
+      return items
     }
 
-    items.push({
-      label: 'Delete',
-      danger: true,
-      onSelect: () => {
-        // `window.confirm` for now, and saying so plainly: a real dialog with
-        // focus management is deferred, not forgotten.
-        if (!window.confirm(`Delete “${node.name}”? This cannot be undone.`)) {
-          return
-        }
-        if (kind === 'collection') {
-          void deleteCollection({ id: node.id, workspaceId: ws })
-        } else if (kind === 'folder') {
-          void deleteFolder({ id: node.id, workspaceId: ws })
-        } else {
-          void deleteRequest({ id: node.id, workspaceId: ws })
-        }
-        // If the open request just went away — directly or with its parent —
-        // fall back to the empty state rather than leaving a stale pane.
-        if (requestId && subtreeContains(tree, node.id, requestId)) {
-          void navigate(`/w/${ws}`, { replace: true })
-        }
-      },
-    })
+    return {
+      ui,
+      cancelRename: () => ui.startRename(null),
+      commitRename: rename,
+      openRequest: (id) => void navigate(`/w/${ws}/requests/${id}`),
+      menuFor,
+    }
+  }, [
+    ui,
+    ws,
+    navigate,
+    updateCollection,
+    moveCollection,
+    deleteCollection,
+    createFolder,
+    updateFolder,
+    moveFolder,
+    deleteFolder,
+    createRequest,
+    updateRequest,
+    moveRequest,
+    deleteRequest,
+  ])
 
-    return items
-  }
-
-  const handlers: TreeHandlers = {
-    isExpanded,
-    toggle,
-    renamingId,
-    startRename: setRenamingId,
-    cancelRename: () => setRenamingId(null),
-    commitRename: (kind, id, name) => void commitRename(kind, id, name),
-    openRequest: (id) => void navigate(`/w/${ws}/requests/${id}`),
-    activeRequestId: requestId,
-    menuFor,
-  }
+  if (!ws) return null
 
   const onMoveConfirmed = (target: MoveTarget) => {
     if (!moveDialog) return
@@ -355,11 +317,12 @@ export function Sidebar() {
           </p>
         )}
 
-        {tree?.collections.map((collection) => (
+        {tree?.collections.map((collection, at) => (
           <CollectionNodeView
             key={collection.id}
             node={collection}
-            siblings={tree.collections}
+            index={at}
+            siblingCount={tree.collections.length}
             handlers={handlers}
           />
         ))}
@@ -376,72 +339,4 @@ export function Sidebar() {
       )}
     </aside>
   )
-}
-
-// ------------------------------------------------------------------ helpers
-
-function findFolder(
-  tree: WorkspaceTree | undefined,
-  id: string,
-): FolderNode | undefined {
-  const walk = (folders: readonly FolderNode[]): FolderNode | undefined => {
-    for (const folder of folders) {
-      if (folder.id === id) return folder
-      const deeper = walk(folder.folders)
-      if (deeper) return deeper
-    }
-    return undefined
-  }
-  for (const collection of tree?.collections ?? []) {
-    const found = walk(collection.folders)
-    if (found) return found
-  }
-  return undefined
-}
-
-function findRequest(
-  tree: WorkspaceTree | undefined,
-  id: string,
-): RequestNode | undefined {
-  const walk = (folders: readonly FolderNode[]): RequestNode | undefined => {
-    for (const folder of folders) {
-      const here = folder.requests.find((r) => r.id === id)
-      if (here) return here
-      const deeper = walk(folder.folders)
-      if (deeper) return deeper
-    }
-    return undefined
-  }
-  for (const collection of tree?.collections ?? []) {
-    const here = collection.requests.find((r) => r.id === id)
-    if (here) return here
-    const found = walk(collection.folders)
-    if (found) return found
-  }
-  return undefined
-}
-
-/** Whether deleting `rootId` would also remove `requestId`. */
-function subtreeContains(
-  tree: WorkspaceTree | undefined,
-  rootId: string,
-  requestId: string,
-): boolean {
-  if (rootId === requestId) return true
-
-  const folderHolds = (folder: FolderNode): boolean =>
-    folder.requests.some((r) => r.id === requestId) ||
-    folder.folders.some(folderHolds)
-
-  const folder = findFolder(tree, rootId)
-  if (folder) return folderHolds(folder)
-
-  const collection = tree?.collections.find((c) => c.id === rootId)
-  if (collection) {
-    return (
-      collection.requests.some((r) => r.id === requestId) ||
-      collection.folders.some(folderHolds)
-    )
-  }
-  return false
 }
