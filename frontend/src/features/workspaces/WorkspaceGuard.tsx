@@ -27,7 +27,7 @@ export function WorkspaceGuard() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-500">
+      <div className="flex min-h-screen items-center justify-center text-fg-subtle">
         Loading…
       </div>
     )

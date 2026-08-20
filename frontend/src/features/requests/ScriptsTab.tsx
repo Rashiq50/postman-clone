@@ -24,13 +24,13 @@ export function ScriptsTab({
 }) {
   return (
     <div className="space-y-4">
-      <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+      <p className="rounded-md bg-warning-soft px-3 py-2 text-sm text-warning-soft-fg">
         Scripts are saved but not executed yet — sending requests is not built.
       </p>
 
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-slate-700">Pre-request</span>
-        <span className="block text-xs text-slate-400">
+        <span className="text-sm font-medium text-fg-muted">Pre-request</span>
+        <span className="block text-xs text-fg-faint">
           Runs before the request is sent.
         </span>
         <textarea
@@ -39,13 +39,13 @@ export function ScriptsTab({
           spellCheck={false}
           rows={10}
           onChange={(e) => onChange({ ...scripts, preRequest: e.target.value })}
-          className="w-full rounded-md border border-slate-300 p-3 font-mono text-sm outline-none focus:border-indigo-500"
+          className="w-full rounded-md border border-line-strong p-3 font-mono text-sm outline-none focus:border-accent"
         />
       </label>
 
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-slate-700">Post-response</span>
-        <span className="block text-xs text-slate-400">
+        <span className="text-sm font-medium text-fg-muted">Post-response</span>
+        <span className="block text-xs text-fg-faint">
           Runs after the response arrives.
         </span>
         <textarea
@@ -54,7 +54,7 @@ export function ScriptsTab({
           spellCheck={false}
           rows={10}
           onChange={(e) => onChange({ ...scripts, postRequest: e.target.value })}
-          className="w-full rounded-md border border-slate-300 p-3 font-mono text-sm outline-none focus:border-indigo-500"
+          className="w-full rounded-md border border-line-strong p-3 font-mono text-sm outline-none focus:border-accent"
         />
       </label>
     </div>

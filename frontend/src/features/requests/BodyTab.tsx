@@ -58,7 +58,7 @@ export function BodyTab({
             setFormatError(null)
             onChange(emptyBody(e.target.value as RequestBodyMode))
           }}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+          className="rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
         >
           {REQUEST_BODY_MODES.map((mode) => (
             <option key={mode} value={mode}>
@@ -71,7 +71,7 @@ export function BodyTab({
           <button
             type="button"
             onClick={format}
-            className="rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+            className="rounded-md border border-line-strong px-2 py-1.5 text-sm text-fg-muted hover:bg-surface-muted"
           >
             Format JSON
           </button>
@@ -79,11 +79,11 @@ export function BodyTab({
       </div>
 
       {formatError && (
-        <p className="text-sm text-red-600">Could not format: {formatError}</p>
+        <p className="text-sm text-danger">Could not format: {formatError}</p>
       )}
 
       {body.mode === 'none' && (
-        <p className="text-sm text-slate-400">This request has no body.</p>
+        <p className="text-sm text-fg-faint">This request has no body.</p>
       )}
 
       {(body.mode === 'raw' || body.mode === 'json') && (
@@ -93,7 +93,7 @@ export function BodyTab({
           spellCheck={false}
           rows={14}
           onChange={(e) => onChange({ mode: body.mode, text: e.target.value })}
-          className="w-full rounded-md border border-slate-300 p-3 font-mono text-sm outline-none focus:border-indigo-500"
+          className="w-full rounded-md border border-line-strong p-3 font-mono text-sm outline-none focus:border-accent"
         />
       )}
 

@@ -19,7 +19,7 @@ export function NodeRow({
   return (
     <div
       className={`group flex items-center gap-1 pr-1 text-sm transition ${
-        isActive ? 'bg-indigo-50 text-indigo-800' : 'hover:bg-slate-100'
+        isActive ? 'bg-accent-soft text-accent-soft-fg' : 'hover:bg-surface-muted'
       }`}
       // Tailwind 4 cannot generate `pl-[…]` from a runtime value, so the
       // indent is an inline style.
@@ -54,7 +54,7 @@ export function Chevron({
       aria-expanded={expanded}
       aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label}`}
       onClick={onToggle}
-      className="w-4 shrink-0 text-xs text-slate-400 hover:text-slate-700"
+      className="w-4 shrink-0 text-xs text-fg-faint hover:text-fg-muted"
     >
       <span aria-hidden>{expanded ? '▾' : '▸'}</span>
     </button>

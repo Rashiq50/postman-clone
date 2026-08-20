@@ -33,7 +33,7 @@ export function KeyValueEditor({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[32rem] text-sm">
         <thead>
-          <tr className="text-left text-xs text-slate-500">
+          <tr className="text-left text-xs text-fg-subtle">
             <th className="w-8 px-2 py-1" />
             <th className="px-2 py-1 font-medium">{keyPlaceholder}</th>
             <th className="px-2 py-1 font-medium">Value</th>
@@ -44,7 +44,7 @@ export function KeyValueEditor({
           {rows.map((row, index) => {
             const isBlankRow = index === rows.length - 1 && rows.length > entries.length
             return (
-              <tr key={index} className="border-t border-slate-100">
+              <tr key={index} className="border-t border-line-subtle">
                 <td className="px-2 py-1">
                   <input
                     type="checkbox"
@@ -61,7 +61,7 @@ export function KeyValueEditor({
                     placeholder={keyPlaceholder}
                     aria-label={`${keyPlaceholder} ${index + 1}`}
                     onChange={(e) => update(index, { key: e.target.value })}
-                    className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-xs outline-none hover:border-slate-200 focus:border-indigo-500"
+                    className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-xs outline-none hover:border-line focus:border-accent"
                   />
                 </td>
                 <td className="px-2 py-1">
@@ -70,7 +70,7 @@ export function KeyValueEditor({
                     placeholder="Value"
                     aria-label={`Value ${index + 1}`}
                     onChange={(e) => update(index, { value: e.target.value })}
-                    className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-xs outline-none hover:border-slate-200 focus:border-indigo-500"
+                    className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-xs outline-none hover:border-line focus:border-accent"
                   />
                 </td>
                 <td className="px-2 py-1">
@@ -81,7 +81,7 @@ export function KeyValueEditor({
                       onClick={() =>
                         onChange(entries.filter((_, i) => i !== index))
                       }
-                      className="rounded px-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      className="rounded px-1 text-fg-faint hover:bg-danger-soft hover:text-danger"
                     >
                       <span aria-hidden>×</span>
                     </button>

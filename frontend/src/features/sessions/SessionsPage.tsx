@@ -15,8 +15,8 @@ export function SessionsPage() {
     <>
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Sessions</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-fg">Sessions</h1>
+          <p className="text-sm text-fg-subtle">
             Devices currently signed in to your account
           </p>
         </div>
@@ -24,31 +24,31 @@ export function SessionsPage() {
           type="button"
           onClick={() => void logoutAll()}
           disabled={isLoggingOutAll}
-          className="h-[38px] rounded-md bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="h-[38px] rounded-md bg-accent px-4 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-disabled disabled:text-fg-disabled"
         >
           {isLoggingOutAll ? 'Signing out…' : 'Sign out everywhere'}
         </button>
       </header>
 
-      {isLoading && <p className="text-sm text-slate-500">Loading sessions…</p>}
+      {isLoading && <p className="text-sm text-fg-subtle">Loading sessions…</p>}
 
       {isError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="text-sm text-red-700">
+        <div className="rounded-lg border border-danger-line bg-danger-soft p-4">
+          <p className="text-sm text-danger-soft-fg">
             {errorMessage(
               error,
               'Could not reach the API. Is the backend running on port 3000?',
             )}
           </p>
           {toApiError(error) && (
-            <p className="mt-1 font-mono text-xs text-red-500">
+            <p className="mt-1 font-mono text-xs text-danger">
               {toApiError(error)?.code} · request {toApiError(error)?.requestId}
             </p>
           )}
           <button
             type="button"
             onClick={() => void refetch()}
-            className="mt-2 text-sm font-medium text-red-700 underline"
+            className="mt-2 text-sm font-medium text-danger-soft-fg underline"
           >
             Retry
           </button>
@@ -56,7 +56,7 @@ export function SessionsPage() {
       )}
 
       {!isLoading && !isError && (!data || data.data.length === 0) && (
-        <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+        <p className="rounded-lg border border-dashed border-line-strong p-8 text-center text-sm text-fg-subtle">
           No active sessions.
         </p>
       )}
@@ -69,7 +69,7 @@ export function SessionsPage() {
             ))}
           </ul>
 
-          <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
+          <div className="mt-4 flex items-center justify-between text-sm text-fg-subtle">
             <span>
               Page {data.meta.page} of {data.meta.totalPages} · {data.meta.total}{' '}
               session{data.meta.total === 1 ? '' : 's'}
@@ -79,7 +79,7 @@ export function SessionsPage() {
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={data.meta.page <= 1 || isFetching}
-                className="rounded-md border border-slate-300 px-3 py-1.5 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-line-strong px-3 py-1.5 transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Previous
               </button>
@@ -87,7 +87,7 @@ export function SessionsPage() {
                 type="button"
                 onClick={() => setPage((p) => p + 1)}
                 disabled={data.meta.page >= data.meta.totalPages || isFetching}
-                className="rounded-md border border-slate-300 px-3 py-1.5 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-line-strong px-3 py-1.5 transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Next
               </button>

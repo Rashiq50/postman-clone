@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router'
 import { useAppSelector } from '../../app/hooks'
+import { ThemeMenu } from '../theme/ThemeMenu'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 import { useLogoutMutation, useMeQuery } from './authApi'
 import { selectCurrentUser } from './authSlice'
@@ -7,8 +8,8 @@ import { selectCurrentUser } from './authSlice'
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded-md px-3 py-1.5 text-sm font-medium transition ${
     isActive
-      ? 'bg-indigo-50 text-indigo-700'
-      : 'text-slate-600 hover:bg-slate-100'
+      ? 'bg-accent-soft text-accent-soft-fg'
+      : 'text-fg-muted hover:bg-surface-muted'
   }`
 
 /**
@@ -25,7 +26,7 @@ export function AppHeader({ wide = false }: { wide?: boolean }) {
   useMeQuery(undefined, { skip: Boolean(user) })
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="border-b border-line bg-surface">
       <div
         className={`flex items-center gap-2 py-3 ${
           wide ? 'w-full px-4' : 'mx-auto max-w-3xl px-4'
@@ -45,8 +46,10 @@ export function AppHeader({ wide = false }: { wide?: boolean }) {
 
         <WorkspaceSwitcher />
 
+        <ThemeMenu />
+
         {user && (
-          <span className="hidden text-sm text-slate-500 sm:inline">
+          <span className="hidden text-sm text-fg-subtle sm:inline">
             {user.name}
           </span>
         )}
@@ -57,7 +60,7 @@ export function AppHeader({ wide = false }: { wide?: boolean }) {
           type="button"
           onClick={() => void logout()}
           disabled={isLoading}
-          className="rounded-md px-2 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+          className="rounded-md px-2 py-1.5 text-sm font-medium text-fg-muted transition hover:bg-surface-muted disabled:opacity-50"
         >
           {isLoading ? 'Signing out…' : 'Sign out'}
         </button>

@@ -420,15 +420,58 @@ overflow-hidden`, a fixed sidebar, panes that scroll independently. `/` redirect
 `/w/:workspaceId`, and the request editor is `/w/:workspaceId/requests/:requestId`.
 
 **The workspace id lives in the URL, and that is a correctness requirement rather than a
-preference.** This app forbids `localStorage`, `sessionStorage` and `redux-persist`, so an
-id kept in Redux would not survive a reload — every refresh would silently drop the user
-into "the first workspace", which stays invisible until someone has two. The URL is the
-only persistence layer available here, and it gives deep links, a working Back button and
-two tabs on two workspaces for free.
+preference.** This app persists no application state — no `localStorage`, no
+`sessionStorage`, no `redux-persist` — so an id kept in Redux would not survive a reload:
+every refresh would silently drop the user into "the first workspace", which stays
+invisible until someone has two. The URL is the only persistence layer available here, and
+it gives deep links, a working Back button and two tabs on two workspaces for free. (The
+lone thing this app does put in storage is the theme preference, which is a display setting
+rather than application state — see *Theming* below.)
 
 `/tasks` and `/sessions` keep the old centred shell. **`/tasks` is the original scaffolding
 and goes away when the execution slice lands** — saying so now is what stops it quietly
 becoming permanent.
+
+### Theming
+
+Four themes ship — **Light**, **Dark**, **Midnight** (true black, cyan accent) and **Paper**
+(warm off-white, amber accent) — plus **System**, which follows `prefers-color-scheme` and
+keeps following it when the OS changes mid-session. The picker is in the header, and also on
+`/login` and `/register`: a preference you cannot reach until after you have signed in is
+not really a preference.
+
+**Every colour in the app is a semantic token.** Components say `bg-surface`,
+`text-fg-subtle`, `border-line`, `text-method-get` — never `bg-white` or `text-slate-500`.
+A theme is then one block of custom properties in `frontend/src/index.css` and nothing else,
+which is the whole point: adding a fifth theme must not mean auditing thirty components.
+The `@theme inline` block that maps `--color-surface` to `--surface` is load-bearing —
+without `inline` Tailwind bakes the value in at build time and switching themes does nothing.
+
+Tailwind's default palette is still generated. Removing it would turn a stray `bg-slate-50`
+into a class that silently renders nothing, which is worse than one that renders wrong, so
+the rule is a convention rather than a compile error: **if a token is missing, add a token.**
+A palette utility that slips in pins that one element to light mode forever, and nobody
+notices until they switch themes.
+
+`yarn contrast` audits all four themes against WCAG AA — every foreground/background pair
+the components actually put together, with alpha composited for the translucent soft fills.
+It found four real failures on the first run, including white-on-indigo-400 at 2.98:1 in the
+dark theme's primary button, which is why `--on-accent` flips dark there. **Add the pair to
+`frontend/scripts/check-contrast.mjs` when you add a token combination** — an unlisted pair
+is unchecked, not passing.
+
+Two mechanics are easy to break:
+
+- **The theme is applied before React mounts,** by an inline classic script in `index.html`.
+  A module script is deferred and a `useEffect` runs after the first paint, so either one
+  flashes the light theme on every reload — the most visible dark-mode bug there is, and one
+  that cannot be fixed from inside React. That script mirrors two storage keys and two
+  attribute names from `features/theme/theme.ts`; they change together.
+- **The preference lives in `localStorage`, deliberately, and outside Redux.** The store has
+  to exist before React does, so a Redux copy would be a second source of truth for one DOM
+  attribute. This is not a hole in the no-persistence rule above: that rule is about
+  credentials and server state, and a colour preference that resets on every reload is a bug
+  rather than a safeguard.
 
 ### Auth in the client
 

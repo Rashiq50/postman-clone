@@ -5,6 +5,45 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Postman Clone</title>
+    <script>
+      /*
+       * Pre-paint theme application.
+       *
+       * React mounts a frame or two after the browser's first paint, so
+       * without this every reload flashes the light theme before the dark one
+       * lands. That flash is the single most visible dark-mode bug there is,
+       * and it cannot be fixed from inside React.
+       *
+       * It stays an inline classic script on purpose: `type="module"` is
+       * deferred, which would put it back after the very paint it exists to
+       * beat.
+       *
+       * The appearance is read from its own key rather than derived, so this
+       * script needs no copy of the theme registry — see `theme.ts`. It does
+       * not validate the stored id either; `initTheme()` does that a moment
+       * later and corrects anything stale.
+       *
+       * WARNING: the two storage keys and the two attribute names below are
+       * mirrored in src/features/theme/theme.ts. Change them together.
+       */
+      (function () {
+        try {
+          var preference = localStorage.getItem('pc.theme') || 'system'
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var isSystem = preference === 'system'
+          var theme = isSystem ? (prefersDark ? 'dark' : 'light') : preference
+          var appearance = isSystem
+            ? theme
+            : localStorage.getItem('pc.theme.appearance') ||
+              (prefersDark ? 'dark' : 'light')
+
+          document.documentElement.setAttribute('data-theme', theme)
+          document.documentElement.setAttribute('data-appearance', appearance)
+        } catch (error) {
+          // Storage blocked, or no matchMedia. The CSS default (light) applies.
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

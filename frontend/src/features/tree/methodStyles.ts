@@ -6,13 +6,19 @@ import type { HttpMethod } from '@postman-clone/contracts'
  * feature — the glyphs are plain text (`▸ ▾ ⋯`) and the badge is the method
  * name itself. Adding a dependency for six triangles is not a trade worth
  * making, and it would be the kind of decision that is hard to reverse.
+ *
+ * These are theme tokens, not palette utilities. A mid-tone emerald that reads
+ * cleanly on white disappears on a black canvas, so each theme retunes the six
+ * hues in `index.css` — see the `--method-*` block there. HEAD and OPTIONS
+ * share `method-other` because they are the two the sidebar never needs to
+ * distinguish at a glance.
  */
 export const methodStyles: Record<HttpMethod, string> = {
-  GET: 'text-emerald-700',
-  POST: 'text-amber-700',
-  PUT: 'text-blue-700',
-  PATCH: 'text-violet-700',
-  DELETE: 'text-red-700',
-  HEAD: 'text-slate-500',
-  OPTIONS: 'text-slate-500',
+  GET: 'text-method-get',
+  POST: 'text-method-post',
+  PUT: 'text-method-put',
+  PATCH: 'text-method-patch',
+  DELETE: 'text-method-delete',
+  HEAD: 'text-method-other',
+  OPTIONS: 'text-method-other',
 }

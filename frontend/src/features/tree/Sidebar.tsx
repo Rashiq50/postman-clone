@@ -321,9 +321,9 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex min-h-0 flex-col border-r border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-        <h2 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+    <aside className="flex min-h-0 flex-col border-r border-line bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-3 py-2">
+        <h2 className="text-xs font-semibold tracking-wide text-fg-subtle uppercase">
           Collections
         </h2>
         <button
@@ -332,7 +332,7 @@ export function Sidebar() {
             const name = window.prompt('Collection name', 'New collection')?.trim()
             if (name) void createCollection({ workspaceId: ws, name })
           }}
-          className="rounded px-1.5 text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          className="rounded px-1.5 text-lg leading-none text-fg-faint hover:bg-surface-muted hover:text-fg-muted"
           aria-label="New collection"
         >
           <span aria-hidden>+</span>
@@ -340,16 +340,16 @@ export function Sidebar() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
-        {isLoading && <p className="px-3 py-2 text-sm text-slate-400">Loading…</p>}
+        {isLoading && <p className="px-3 py-2 text-sm text-fg-faint">Loading…</p>}
 
         {error && (
-          <p className="px-3 py-2 text-sm text-red-600">
+          <p className="px-3 py-2 text-sm text-danger">
             {errorMessage(error, 'Could not load this workspace.')}
           </p>
         )}
 
         {tree?.collections.length === 0 && (
-          <p className="px-3 py-4 text-sm text-slate-400">
+          <p className="px-3 py-4 text-sm text-fg-faint">
             No collections yet. Use <span aria-hidden>+</span> above to create
             one.
           </p>

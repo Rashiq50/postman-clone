@@ -51,7 +51,7 @@ export function InlineRename({
         else commit(e.currentTarget.value)
       }}
       style={{ paddingLeft: 8 + depth * 14 }}
-      className="w-full rounded-md border border-indigo-400 bg-white py-1 pr-2 text-sm outline-none"
+      className="w-full rounded-md border border-accent bg-surface py-1 pr-2 text-sm outline-none"
     />
   )
 }

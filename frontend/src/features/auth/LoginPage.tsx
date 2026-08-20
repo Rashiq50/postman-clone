@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { baseApi } from "../../app/baseApi";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { errorMessage, fieldErrors, toApiError } from "../../lib/api-error";
+import { ThemeMenu } from "../theme/ThemeMenu";
 import { useLoginMutation } from "./authApi";
 import { selectIsAuthenticated } from "./authSlice";
 
@@ -63,11 +64,11 @@ export function LoginPage() {
   if (isAuthenticated) return <Navigate to={from} replace />;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <div className="w-full max-w-sm">
         <header className="mb-6">
-          <h1 className="text-2xl font-semibold text-slate-900">Sign in</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-fg">Sign in</h1>
+          <p className="text-sm text-fg-subtle">
             Postman clone — use your account to continue
           </p>
         </header>
@@ -78,13 +79,13 @@ export function LoginPage() {
           // different voice from the API's field errors, and cannot be styled
           // or read by the same assistive tech. One error channel, not two.
           noValidate
-          className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+          className="rounded-lg border border-line bg-surface p-4 shadow-sm"
         >
           <div className="flex flex-col gap-3">
             <div>
               <label
                 htmlFor="email"
-                className="mb-1 block text-sm font-medium text-slate-700"
+                className="mb-1 block text-sm font-medium text-fg-muted"
               >
                 Email
               </label>
@@ -97,19 +98,19 @@ export function LoginPage() {
                 aria-invalid={Boolean(fields.email)}
                 className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 ${
                   fields.email
-                    ? "border-red-400 focus:border-red-500 focus:ring-red-200"
-                    : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-200"
+                    ? "border-danger focus:ring-focus-danger"
+                    : "border-line-strong focus:border-accent focus:ring-focus"
                 }`}
               />
               {fields.email && (
-                <p className="mt-1 text-xs text-red-600">{fields.email}</p>
+                <p className="mt-1 text-xs text-danger">{fields.email}</p>
               )}
             </div>
 
             <div>
               <label
                 htmlFor="password"
-                className="mb-1 block text-sm font-medium text-slate-700"
+                className="mb-1 block text-sm font-medium text-fg-muted"
               >
                 Password
               </label>
@@ -123,8 +124,8 @@ export function LoginPage() {
                   aria-invalid={Boolean(fields.password)}
                   className={`w-full rounded-md border py-2 pl-3 pr-16 text-sm outline-none focus:ring-2 ${
                     fields.password
-                      ? "border-red-400 focus:border-red-500 focus:ring-red-200"
-                      : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-200"
+                      ? "border-danger focus:ring-focus-danger"
+                      : "border-line-strong focus:border-accent focus:ring-focus"
                   }`}
                 />
                 <button
@@ -133,30 +134,30 @@ export function LoginPage() {
                   aria-controls="password"
                   aria-pressed={showPassword}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-slate-500 transition hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-200"
+                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-fg-subtle transition hover:text-fg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
               {fields.password && (
-                <p className="mt-1 text-xs text-red-600">{fields.password}</p>
+                <p className="mt-1 text-xs text-danger">{fields.password}</p>
               )}
             </div>
 
             <button
               type="submit"
               disabled={isLoading || !email.trim() || !password}
-              className="h-[38px] rounded-md bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="h-[38px] rounded-md bg-accent px-4 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-disabled disabled:text-fg-disabled"
             >
               {isLoading ? "Signing in…" : "Sign in"}
             </button>
 
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-fg-subtle">
               Don't have an account?{" "}
               <Link
                 to="/register"
                 state={{ from }}
-                className="font-medium text-indigo-600 hover:text-indigo-700"
+                className="font-medium text-accent hover:text-accent-hover"
               >
                 Sign up
               </Link>
@@ -169,19 +170,28 @@ export function LoginPage() {
             rejected sign-in is silent.
           */}
           {error && (
-            <p role="alert" className="mt-2 text-sm text-red-600">
+            <p role="alert" className="mt-2 text-sm text-danger">
               {errorMessage(
                 error,
                 "Could not reach the server. Check your connection.",
               )}
               {apiError && (
-                <span className="ml-2 font-mono text-xs text-slate-400">
+                <span className="ml-2 font-mono text-xs text-fg-faint">
                   {apiError.code} · {apiError.requestId.slice(0, 8)}
                 </span>
               )}
             </p>
           )}
         </form>
+
+        {/*
+          The theme control is reachable from every screen, not just the ones
+          behind the header. A preference set on a machine and then hidden
+          until sign-in is the same as not having one.
+        */}
+        <div className="mt-4 flex justify-center">
+          <ThemeMenu />
+        </div>
       </div>
     </div>
   );

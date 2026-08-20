@@ -42,19 +42,19 @@ export function SessionItem({ session }: { session: SessionSummary }) {
   }
 
   return (
-    <li className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <li className="flex items-center gap-4 rounded-lg border border-line bg-surface p-4 shadow-sm">
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-slate-900">
+        <p className="truncate font-medium text-fg">
           {session.userAgent ?? 'Unknown device'}
         </p>
-        <p className="truncate text-sm text-slate-500">
+        <p className="truncate text-sm text-fg-subtle">
           {session.ipAddress ?? 'Unknown address'} ·{' '}
           {relativeTime(session.lastUsedAt ?? session.createdAt)}
         </p>
       </div>
 
       {session.current && (
-        <span className="hidden rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800 sm:inline">
+        <span className="hidden rounded-full bg-success-soft px-2.5 py-1 text-xs font-medium text-success-soft-fg sm:inline">
           This device
         </span>
       )}
@@ -63,7 +63,7 @@ export function SessionItem({ session }: { session: SessionSummary }) {
         type="button"
         onClick={handleRevoke}
         disabled={isLoading}
-        className="rounded-md px-2 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+        className="rounded-md px-2 py-1.5 text-sm font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
       >
         {session.current ? 'Sign out' : 'Revoke'}
       </button>

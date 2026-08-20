@@ -88,7 +88,7 @@ export function NodeMenu({ items, label }: { items: MenuItem[]; label: string })
           if (anchor) setAnchor(null)
           else open()
         }}
-        className="rounded px-1.5 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-slate-200 hover:text-slate-700 focus:opacity-100"
+        className="rounded px-1.5 text-fg-faint opacity-0 transition group-hover:opacity-100 hover:bg-surface-muted hover:text-fg-muted focus:opacity-100"
       >
         <span aria-hidden>⋯</span>
       </button>
@@ -99,7 +99,7 @@ export function NodeMenu({ items, label }: { items: MenuItem[]; label: string })
           role="menu"
           style={{ position: 'fixed', top: anchor.top, left: anchor.left }}
           onMouseDown={(e) => e.stopPropagation()}
-          className="z-50 w-44 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+          className="z-50 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg"
         >
           {items.map((item) => (
             <button
@@ -113,8 +113,8 @@ export function NodeMenu({ items, label }: { items: MenuItem[]; label: string })
               }}
               className={`block w-full px-3 py-1.5 text-left text-sm transition disabled:opacity-40 ${
                 item.danger
-                  ? 'text-red-600 hover:bg-red-50'
-                  : 'text-slate-700 hover:bg-slate-100'
+                  ? 'text-danger hover:bg-danger-soft'
+                  : 'text-fg-muted hover:bg-surface-muted'
               }`}
             >
               {item.label}

@@ -9,6 +9,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { baseApi } from "../../app/baseApi";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { errorMessage, fieldErrors, toApiError } from "../../lib/api-error";
+import { ThemeMenu } from "../theme/ThemeMenu";
 import { useRegisterMutation } from "./authApi";
 import { selectIsAuthenticated } from "./authSlice";
 
@@ -63,8 +64,8 @@ const FIELD_ORDER: FieldName[] = ["name", "email", "password", "confirmPassword"
 const inputClass = (invalid: boolean, extra = "") =>
   `w-full rounded-md border text-sm outline-none focus:ring-2 ${extra} ${
     invalid
-      ? "border-red-400 focus:border-red-500 focus:ring-red-200"
-      : "border-slate-300 focus:border-indigo-500 focus:ring-indigo-200"
+      ? "border-danger focus:ring-focus-danger"
+      : "border-line-strong focus:border-accent focus:ring-focus"
   }`;
 
 const RegisterPage = () => {
@@ -158,11 +159,11 @@ const RegisterPage = () => {
   if (isAuthenticated) return <Navigate to={from} replace />;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <div className="w-full max-w-sm">
         <header className="mb-6">
-          <h1 className="text-2xl font-semibold text-slate-900">Sign up</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-fg">Sign up</h1>
+          <p className="text-sm text-fg-subtle">
             Postman clone — create an account to continue
           </p>
         </header>
@@ -170,13 +171,13 @@ const RegisterPage = () => {
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+          className="rounded-lg border border-line bg-surface p-4 shadow-sm"
         >
           <div className="flex flex-col gap-3">
             <div>
               <label
                 htmlFor="name"
-                className="mb-1 block text-sm font-medium text-slate-700"
+                className="mb-1 block text-sm font-medium text-fg-muted"
               >
                 Name
               </label>
@@ -196,7 +197,7 @@ const RegisterPage = () => {
                 className={inputClass(Boolean(problemFor("name")), "px-3 py-2")}
               />
               {problemFor("name") && (
-                <p id="name-error" className="mt-1 text-xs text-red-600">
+                <p id="name-error" className="mt-1 text-xs text-danger">
                   {problemFor("name")}
                 </p>
               )}
@@ -205,7 +206,7 @@ const RegisterPage = () => {
             <div>
               <label
                 htmlFor="email"
-                className="mb-1 block text-sm font-medium text-slate-700"
+                className="mb-1 block text-sm font-medium text-fg-muted"
               >
                 Email
               </label>
@@ -227,7 +228,7 @@ const RegisterPage = () => {
                 className={inputClass(Boolean(problemFor("email")), "px-3 py-2")}
               />
               {problemFor("email") && (
-                <p id="email-error" className="mt-1 text-xs text-red-600">
+                <p id="email-error" className="mt-1 text-xs text-danger">
                   {problemFor("email")}
                   {emailTaken && (
                     <>
@@ -248,7 +249,7 @@ const RegisterPage = () => {
             <div>
               <label
                 htmlFor="password"
-                className="mb-1 block text-sm font-medium text-slate-700"
+                className="mb-1 block text-sm font-medium text-fg-muted"
               >
                 Password
               </label>
@@ -281,17 +282,17 @@ const RegisterPage = () => {
                   aria-controls="password"
                   aria-pressed={showPassword}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-slate-500 transition hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-200"
+                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-fg-subtle transition hover:text-fg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
               {problemFor("password") ? (
-                <p id="password-error" className="mt-1 text-xs text-red-600">
+                <p id="password-error" className="mt-1 text-xs text-danger">
                   {problemFor("password")}
                 </p>
               ) : (
-                <p id="password-hint" className="mt-1 text-xs text-slate-500">
+                <p id="password-hint" className="mt-1 text-xs text-fg-subtle">
                   At least 8 characters, including a letter and a number.
                 </p>
               )}
@@ -300,7 +301,7 @@ const RegisterPage = () => {
             <div>
               <label
                 htmlFor="confirm-password"
-                className="mb-1 block text-sm font-medium text-slate-700"
+                className="mb-1 block text-sm font-medium text-fg-muted"
               >
                 Confirm password
               </label>
@@ -339,7 +340,7 @@ const RegisterPage = () => {
                       ? "Hide password confirmation"
                       : "Show password confirmation"
                   }
-                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-slate-500 transition hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-200"
+                  className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-fg-subtle transition hover:text-fg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
                   {showConfirmPassword ? "Hide" : "Show"}
                 </button>
@@ -347,7 +348,7 @@ const RegisterPage = () => {
               {problemFor("confirmPassword") && (
                 <p
                   id="confirm-password-error"
-                  className="mt-1 text-xs text-red-600"
+                  className="mt-1 text-xs text-danger"
                 >
                   {problemFor("confirmPassword")}
                 </p>
@@ -357,17 +358,17 @@ const RegisterPage = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="h-[38px] rounded-md bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="h-[38px] rounded-md bg-accent px-4 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-disabled disabled:text-fg-disabled"
             >
               {isLoading ? "Creating account…" : "Sign up"}
             </button>
 
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-fg-subtle">
               Already have an account?{" "}
               <Link
                 to="/login"
                 state={{ from }}
-                className="font-medium text-indigo-600 hover:text-indigo-700"
+                className="font-medium text-accent hover:text-accent-hover"
               >
                 Sign in
               </Link>
@@ -385,19 +386,28 @@ const RegisterPage = () => {
           </p>
 
           {error && !emailTaken && (
-            <p className="mt-2 text-sm text-red-600" role="alert">
+            <p className="mt-2 text-sm text-danger" role="alert">
               {errorMessage(
                 error,
                 "Could not reach the server. Check your connection.",
               )}
               {apiError && (
-                <span className="ml-2 font-mono text-xs text-slate-400">
+                <span className="ml-2 font-mono text-xs text-fg-faint">
                   {apiError.code} · {apiError.requestId.slice(0, 8)}
                 </span>
               )}
             </p>
           )}
         </form>
+
+        {/*
+          The theme control is reachable from every screen, not just the ones
+          behind the header. A preference set on a machine and then hidden
+          until sign-in is the same as not having one.
+        */}
+        <div className="mt-4 flex justify-center">
+          <ThemeMenu />
+        </div>
       </div>
     </div>
   );

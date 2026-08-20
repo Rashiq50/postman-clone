@@ -19,7 +19,7 @@ export function WorkspaceSwitcher() {
       <select
         value={workspaceId ?? ''}
         onChange={(e) => void navigate(`/w/${e.target.value}`)}
-        className="max-w-[12rem] rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+        className="max-w-[12rem] rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
       >
         {/* Only while the route has no workspace — otherwise a controlled
             select with no matching option warns and renders blank. */}

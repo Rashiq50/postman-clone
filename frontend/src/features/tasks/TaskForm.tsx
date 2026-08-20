@@ -30,7 +30,7 @@ export function TaskForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+      className="mb-6 rounded-lg border border-line bg-surface p-4 shadow-sm"
     >
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="flex-1">
@@ -41,12 +41,12 @@ export function TaskForm() {
             aria-invalid={Boolean(fields.title)}
             className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 ${
               fields.title
-                ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
-                : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-200'
+                ? 'border-danger focus:ring-focus-danger'
+                : 'border-line-strong focus:border-accent focus:ring-focus'
             }`}
           />
           {fields.title && (
-            <p className="mt-1 text-xs text-red-600">{fields.title}</p>
+            <p className="mt-1 text-xs text-danger">{fields.title}</p>
           )}
         </div>
         <div className="flex-1">
@@ -57,28 +57,28 @@ export function TaskForm() {
             aria-invalid={Boolean(fields.description)}
             className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 ${
               fields.description
-                ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
-                : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-200'
+                ? 'border-danger focus:ring-focus-danger'
+                : 'border-line-strong focus:border-accent focus:ring-focus'
             }`}
           />
           {fields.description && (
-            <p className="mt-1 text-xs text-red-600">{fields.description}</p>
+            <p className="mt-1 text-xs text-danger">{fields.description}</p>
           )}
         </div>
         <button
           type="submit"
           disabled={isLoading || !title.trim()}
-          className="h-[38px] rounded-md bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="h-[38px] rounded-md bg-accent px-4 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-surface-disabled disabled:text-fg-disabled"
         >
           {isLoading ? 'Adding…' : 'Add task'}
         </button>
       </div>
 
       {error && (
-        <p className="mt-2 text-sm text-red-600">
+        <p className="mt-2 text-sm text-danger">
           {errorMessage(error, 'Could not reach the server. Check your connection.')}
           {apiError && (
-            <span className="ml-2 font-mono text-xs text-slate-400">
+            <span className="ml-2 font-mono text-xs text-fg-faint">
               {apiError.code} · {apiError.requestId.slice(0, 8)}
             </span>
           )}

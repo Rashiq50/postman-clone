@@ -33,7 +33,7 @@ export function RequestUrlBar({
         value={method}
         aria-label="HTTP method"
         onChange={(e) => onMethodChange(e.target.value as HttpMethod)}
-        className={`rounded-md border border-slate-300 bg-white px-2 py-2 font-mono text-xs font-semibold outline-none focus:border-indigo-500 ${methodStyles[method]}`}
+        className={`rounded-md border border-line-strong bg-surface px-2 py-2 font-mono text-xs font-semibold outline-none focus:border-accent ${methodStyles[method]}`}
       >
         {HTTP_METHODS.map((m) => (
           <option key={m} value={m}>
@@ -48,14 +48,14 @@ export function RequestUrlBar({
         placeholder="https://api.example.com/users"
         spellCheck={false}
         onChange={(e) => onUrlChange(e.target.value)}
-        className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none focus:border-indigo-500"
+        className="min-w-0 flex-1 rounded-md border border-line-strong px-3 py-2 font-mono text-sm outline-none focus:border-accent"
       />
 
       <button
         type="button"
         onClick={onSave}
         disabled={!isDirty || isSaving}
-        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-40"
+        className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover disabled:opacity-40"
       >
         {isSaving ? 'Saving…' : 'Save'}
       </button>

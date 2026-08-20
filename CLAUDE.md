@@ -30,9 +30,11 @@ yarn migration:generate src/database/migrations/AddSomething && yarn migration:r
 cd frontend
 yarn lint                             # oxlint
 yarn build                            # tsc -b && vite build
+yarn contrast                         # WCAG audit of the theme tokens in src/index.css
 ```
 
-The frontend has no test runner configured.
+The frontend has no test runner configured; `yarn contrast` is the closest thing it has to
+one, and it is a plain node script rather than a suite.
 
 ## Cross-cutting invariants
 
@@ -187,7 +189,9 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
   Each arrives with the feature that reads it.
 - The access token is held **in memory only**, in `authSlice`. No `localStorage`, no
   `sessionStorage`, no `redux-persist`. A reload restores the session through the refresh cookie.
-  Adding any persistence layer here is the thing to catch in review.
+  Adding any persistence layer here is the thing to catch in review. (The theme preference is
+  in `localStorage` — see *Theming*. That is a display setting, not a credential, and it is
+  the only thing this app stores.)
 - No module-level token mirror. `prepareHeaders` reads the store. The `baseApi ↔ authSlice` cycle
   is type-only (`import type` + `verbatimModuleSyntax` emits nothing), so it does not exist at runtime.
 - `runRefresh` in `baseApi.ts` calls the refresh URL through `rawBaseQuery` on purpose. Routing it
@@ -289,9 +293,9 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   `AppHeader` takes one `wide` prop. ⚠️ `min-h-0` on the workbench grid and `<main>` is
   load-bearing — a grid child defaults to `min-height: auto`, so without it the panes size to
   content and the whole page scrolls.
-- **The workspace id lives in the URL, not Redux.** With no `localStorage`/`redux-persist`
-  allowed, an id in Redux does not survive a reload and every refresh would silently pick "the
-  first workspace" — invisible until a user has two.
+- **The workspace id lives in the URL, not Redux.** Nothing but the theme preference is
+  persisted, so an id in Redux does not survive a reload and every refresh would silently
+  pick "the first workspace" — invisible until a user has two.
 - ⚠️ **Because the id is in the URL it outlives the session that produced it, so `WorkspaceGuard`
   wraps `w/:workspaceId` and bounces an id the signed-in user does not own back to `/`.** The
   path that needs it: signing out sends `RequireAuth` to `/login` with
@@ -327,6 +331,62 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   Format JSON button. Both are dependency decisions belonging to the execution slice.
 - **No Send button, not even a disabled one.** Deliberate; see `RequestUrlBar.tsx`.
 - Login and register default their post-auth `from` to `/`, not `/tasks`.
+
+## Theming
+
+**Every colour is a semantic token.** Components say `bg-surface`, `text-fg-muted`,
+`border-line`, `ring-focus`, `text-method-get` — never `bg-white`, `text-slate-500` or
+`bg-indigo-600`. All four themes are blocks of custom properties in
+[index.css](frontend/src/index.css) and nothing else, which is the invariant that makes a
+fifth theme one CSS block instead of a thirty-file audit.
+
+- ⚠️ **`@theme inline` is load-bearing.** It makes `bg-canvas` emit
+  `background-color: var(--canvas)` instead of baking the value in at build time. Drop the
+  `inline` and every utility freezes at its light-theme value — the page still renders, the
+  themes just stop switching, which reads as a broken toggle rather than a CSS mistake.
+- **Tailwind's default palette is still generated, on purpose.** Killing it with
+  `--color-*: initial` would make a stray `bg-slate-50` generate *no rule at all* — a silent
+  no-op is worse than a wrong colour. So the rule is enforced by review, not the compiler:
+  a palette utility pins that element to light mode forever and nobody sees it until they
+  switch themes. **If a token is missing, add a token.**
+- **Adding a theme is exactly two edits**: a `:root[data-theme='<id>']` block in `index.css`
+  (including its `color-scheme`, which is what themes native form controls, scrollbars and
+  the `<select>` popup) and an entry in
+  [themes.ts](frontend/src/features/theme/themes.ts). If a third edit seems necessary, the
+  missing piece is a token.
+- **`yarn contrast` is the guard on all of that**
+  ([check-contrast.mjs](frontend/scripts/check-contrast.mjs)). It parses the CSS rather than
+  importing it, composites alpha for the translucent soft fills, and exits non-zero. It
+  caught four real failures on its first run — most importantly white-on-indigo-400 at
+  2.98:1 on the dark theme's primary button, which is why the dark `--on-accent` is
+  `#0f172a` and not white. **A token pair not listed in `PAIRS` is unchecked, not passing.**
+- The dark themes do not invert the light one. Their soft fills are translucent so they tint
+  whatever surface they land on, and `--accent` moves *lighter* while `--on-accent` flips
+  *dark* — a single accent cannot be both readable link text on a dark canvas and a fill
+  that white text sits on.
+
+### The theme store
+
+- ⚠️ **The theme is applied before React mounts**, by an inline **classic** script in
+  [index.html](frontend/index.html). `type="module"` is deferred and a `useEffect` runs
+  after the first paint, so either one flashes the light theme on every reload. That script
+  mirrors `pc.theme`, `pc.theme.appearance`, `data-theme` and `data-appearance` from
+  [theme.ts](frontend/src/features/theme/theme.ts) — change them together. It deliberately
+  does *not* validate the stored id; `initTheme()` does that a moment later.
+- **The appearance is mirrored into its own storage key** so that script needs no copy of
+  the theme registry. Deriving it there instead would be a third place to update whenever a
+  theme is added, and the one most likely to be missed.
+- ⚠️ **The preference is in `localStorage`, and that does not contradict the rule in
+  `authSlice`.** That rule is about the access token — a persisted credential is a real
+  risk. A colour preference is not a credential, and one that resets on every reload is a
+  bug. Do not "consistency-fix" this into memory.
+- **It is not a Redux slice.** The store has to exist before React does (see the inline
+  script), so a Redux copy would be a second source of truth for one DOM attribute — the
+  same argument that keeps `BroadcastChannel` out of auth. `useTheme` wraps it with
+  `useSyncExternalStore`; `getThemeState` must keep returning the *same* object until
+  something changes, or every commit re-renders.
+- `initTheme()` is called at module scope in `main.tsx`, next to `bootstrapAuth`, and
+  registers the `matchMedia` listener that keeps `'system'` honest when the OS flips.
 
 ## Current state
 
@@ -379,6 +439,21 @@ tenancy* above for the rules and *Frontend workbench rules* for the client. Unit
 ordering, the scope fragments, provisioning, `build-tree`, the folder cycle check, the requests
 service and the jsonb constraints; `backend/test/workspaces.e2e-spec.ts` covers the API end to
 end, including cross-tenant isolation and the `VIEWER` role seam.
+
+**Theming is complete on the client** and there is no server side to it. Four themes (Light,
+Dark, Midnight, Paper) plus System, a picker in the header and on both auth pages, and every
+component converted off Tailwind's palette onto semantic tokens — the conversion was the bulk
+of the work and is what keeps a fifth theme cheap. `yarn contrast` covers all four against
+WCAG AA. See *Theming* above for the traps.
+
+Deliberately **not** built for theming: the preference is **per browser, not per account** —
+putting it on the user row means a migration, a column, a DTO and a PATCH endpoint to make a
+setting follow someone between devices, and nothing else in this slice needed the API to
+change. **No user-defined colours** either: a colour picker means runtime CSS variables, a
+settings surface and contrast that can no longer be guaranteed, whereas a fixed set is
+auditable by `yarn contrast`. Both seams are open — a stored preference is a string this
+store already knows how to apply, and a custom theme is a `data-theme` value with its
+variables written onto `<html>`.
 
 Deliberately **not** built here, each for a stated reason: sending requests (its own security
 surface — see the README), any environment UI (nothing observable without interpolation),

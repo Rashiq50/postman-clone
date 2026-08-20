@@ -20,7 +20,7 @@ export function WorkspaceRedirect() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-500">
+      <div className="flex min-h-screen items-center justify-center text-fg-subtle">
         Loading…
       </div>
     )
@@ -34,7 +34,7 @@ export function WorkspaceRedirect() {
     // spinner if it ever happens anyway.
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
-        <p className="max-w-sm text-center text-sm text-slate-500">
+        <p className="max-w-sm text-center text-sm text-fg-subtle">
           We couldn&rsquo;t load your workspace. Try reloading the page.
         </p>
       </div>

@@ -49,7 +49,7 @@ export function CollectionNodeView({
           />
         }
       >
-        <span className="font-medium text-slate-800">{node.name}</span>
+        <span className="font-medium text-fg">{node.name}</span>
       </NodeRow>
 
       {expanded && (
@@ -83,7 +83,7 @@ export function CollectionNodeView({
             />
           ))}
           {node.folders.length === 0 && node.requests.length === 0 && (
-            <p className="py-1 pl-[36px] text-xs text-slate-400">Empty</p>
+            <p className="py-1 pl-[36px] text-xs text-fg-faint">Empty</p>
           )}
         </>
       )}

@@ -77,7 +77,7 @@ export function FolderNodeView({
           />
         }
       >
-        <span className="text-slate-700">{node.name}</span>
+        <span className="text-fg-muted">{node.name}</span>
       </NodeRow>
 
       {expanded && (
@@ -112,7 +112,7 @@ export function FolderNodeView({
           ))}
           {node.folders.length === 0 && node.requests.length === 0 && (
             <p
-              className="py-1 text-xs text-slate-400"
+              className="py-1 text-xs text-fg-faint"
               style={{ paddingLeft: 8 + (depth + 1) * 14 }}
             >
               Empty

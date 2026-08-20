@@ -20,7 +20,7 @@ function emptyAuth(type: RequestAuthType): RequestAuth {
 }
 
 const fieldClass =
-  'w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none focus:border-indigo-500'
+  'w-full rounded-md border border-line-strong px-3 py-2 font-mono text-sm outline-none focus:border-accent'
 
 /**
  * ⚠️ The `type="password"` fields here are **cosmetic only**. These values are
@@ -43,7 +43,7 @@ export function AuthTab({
         value={auth.type}
         aria-label="Auth type"
         onChange={(e) => onChange(emptyAuth(e.target.value as RequestAuthType))}
-        className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+        className="rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
       >
         {REQUEST_AUTH_TYPES.map((type) => (
           <option key={type} value={type}>
@@ -53,20 +53,20 @@ export function AuthTab({
       </select>
 
       {auth.type === 'inherit' && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-fg-faint">
           Inherits auth from the parent folder or collection.
         </p>
       )}
 
       {auth.type === 'none' && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-fg-faint">
           This request sends no auth.
         </p>
       )}
 
       {auth.type === 'bearer' && (
         <label className="block space-y-1">
-          <span className="text-xs font-medium text-slate-600">Token</span>
+          <span className="text-xs font-medium text-fg-muted">Token</span>
           <input
             type="password"
             value={auth.token}
@@ -79,7 +79,7 @@ export function AuthTab({
       {auth.type === 'basic' && (
         <>
           <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600">Username</span>
+            <span className="text-xs font-medium text-fg-muted">Username</span>
             <input
               value={auth.username}
               onChange={(e) =>
@@ -89,7 +89,7 @@ export function AuthTab({
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600">Password</span>
+            <span className="text-xs font-medium text-fg-muted">Password</span>
             <input
               type="password"
               value={auth.password}
@@ -105,7 +105,7 @@ export function AuthTab({
       {auth.type === 'apiKey' && (
         <>
           <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600">Key</span>
+            <span className="text-xs font-medium text-fg-muted">Key</span>
             <input
               value={auth.key}
               onChange={(e) => onChange({ ...auth, key: e.target.value })}
@@ -113,7 +113,7 @@ export function AuthTab({
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600">Value</span>
+            <span className="text-xs font-medium text-fg-muted">Value</span>
             <input
               type="password"
               value={auth.value}
@@ -122,13 +122,13 @@ export function AuthTab({
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600">Add to</span>
+            <span className="text-xs font-medium text-fg-muted">Add to</span>
             <select
               value={auth.in}
               onChange={(e) =>
                 onChange({ ...auth, in: e.target.value as 'header' | 'query' })
               }
-              className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+              className="rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent"
             >
               <option value="header">Header</option>
               <option value="query">Query param</option>
@@ -137,7 +137,7 @@ export function AuthTab({
         </>
       )}
 
-      <p className="pt-2 text-xs text-slate-400">
+      <p className="pt-2 text-xs text-fg-faint">
         Credentials are stored in plaintext in this version — see the README.
       </p>
     </div>

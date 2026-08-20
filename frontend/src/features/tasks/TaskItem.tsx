@@ -6,9 +6,9 @@ import {
 import { useDeleteTaskMutation, useUpdateTaskMutation } from './tasksApi'
 
 const statusStyles: Record<TaskStatus, string> = {
-  TODO: 'bg-slate-100 text-slate-700',
-  IN_PROGRESS: 'bg-amber-100 text-amber-800',
-  DONE: 'bg-emerald-100 text-emerald-800',
+  TODO: 'bg-surface-muted text-fg-muted',
+  IN_PROGRESS: 'bg-warning-soft text-warning-soft-fg',
+  DONE: 'bg-success-soft text-success-soft-fg',
 }
 
 export function TaskItem({ task }: { task: Task }) {
@@ -16,11 +16,11 @@ export function TaskItem({ task }: { task: Task }) {
   const [deleteTask, { isLoading: isDeleting }] = useDeleteTaskMutation()
 
   return (
-    <li className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <li className="flex items-center gap-4 rounded-lg border border-line bg-surface p-4 shadow-sm">
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-slate-900">{task.title}</p>
+        <p className="truncate font-medium text-fg">{task.title}</p>
         {task.description && (
-          <p className="truncate text-sm text-slate-500">{task.description}</p>
+          <p className="truncate text-sm text-fg-subtle">{task.description}</p>
         )}
       </div>
 
@@ -39,7 +39,7 @@ export function TaskItem({ task }: { task: Task }) {
             changes: { status: e.target.value as TaskStatus },
           })
         }
-        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+        className="rounded-md border border-line-strong px-2 py-1.5 text-sm outline-none focus:border-accent"
       >
         {TASK_STATUSES.map((status) => (
           <option key={status} value={status}>
@@ -52,7 +52,7 @@ export function TaskItem({ task }: { task: Task }) {
         type="button"
         onClick={() => deleteTask(task.id)}
         disabled={isDeleting}
-        className="rounded-md px-2 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+        className="rounded-md px-2 py-1.5 text-sm font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
       >
         Delete
       </button>

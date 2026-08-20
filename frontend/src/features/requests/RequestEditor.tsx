@@ -85,13 +85,13 @@ export function RequestEditor() {
   }, [blocker])
 
   if (isLoading) {
-    return <p className="p-6 text-sm text-slate-400">Loading…</p>
+    return <p className="p-6 text-sm text-fg-faint">Loading…</p>
   }
 
   if (error || !request || !draft) {
     return (
       <div className="flex h-full items-center justify-center px-6">
-        <p className="max-w-sm text-center text-sm text-slate-500">
+        <p className="max-w-sm text-center text-sm text-fg-subtle">
           {errorMessage(error, 'This request could not be found.')}
         </p>
       </div>
@@ -100,12 +100,12 @@ export function RequestEditor() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="space-y-3 border-b border-slate-200 bg-white px-4 py-3">
+      <div className="space-y-3 border-b border-line bg-surface px-4 py-3">
         <input
           value={draft.name}
           aria-label="Request name"
           onChange={(e) => patch({ name: e.target.value })}
-          className="w-full rounded-md border border-transparent px-1 py-1 text-lg font-medium text-slate-900 outline-none hover:border-slate-200 focus:border-indigo-500"
+          className="w-full rounded-md border border-transparent px-1 py-1 text-lg font-medium text-fg outline-none hover:border-line focus:border-accent"
         />
 
         <RequestUrlBar
@@ -118,10 +118,10 @@ export function RequestEditor() {
           onSave={() => void save()}
         />
 
-        {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+        {saveError && <p className="text-sm text-danger">{saveError}</p>}
       </div>
 
-      <div className="flex gap-1 border-b border-slate-200 bg-white px-4">
+      <div className="flex gap-1 border-b border-line bg-surface px-4">
         {TABS.map((name) => (
           <button
             key={name}
@@ -129,8 +129,8 @@ export function RequestEditor() {
             onClick={() => setTab(name)}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition ${
               tab === name
-                ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-fg-subtle hover:text-fg'
             }`}
           >
             {name}

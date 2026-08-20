@@ -1,1 +1,357 @@
 @import 'tailwindcss';
+
+/*
+ * ============================================================================
+ * Theming
+ * ============================================================================
+ *
+ * Every colour in this app comes from a **semantic token** — `bg-surface`,
+ * `text-fg-subtle`, `border-line` — never from a palette utility like
+ * `bg-white` or `text-slate-500`. A theme is then one block of custom
+ * properties below, and *nothing else in the codebase changes*. That is the
+ * whole design: adding a theme must never mean auditing 30 components.
+ *
+ * ⚠️ **Do not reintroduce palette utilities.** Tailwind's default palette is
+ * still generated (removing it would make a typo'd class silently render
+ * unstyled rather than fail), so `bg-slate-50` still *works* — it just pins
+ * that element to light mode forever, and the breakage is invisible until
+ * someone switches themes. If a token is missing, add a token.
+ *
+ * `@theme inline` is load-bearing: it makes `bg-canvas` emit
+ * `background-color: var(--canvas)` rather than baking in the value at build
+ * time, which is what lets a `[data-theme]` block re-point it at runtime.
+ * Without `inline`, switching themes would do nothing.
+ *
+ * The active theme is the `data-theme` attribute on <html>, written by
+ * `features/theme/theme.ts` and pre-applied by the inline script in
+ * `index.html`. `data-appearance` (light|dark) accompanies it and drives the
+ * `dark:` variant below.
+ */
+
+/*
+ * An escape hatch for the handful of things a colour token cannot express —
+ * an inverted image, a shadow strength. Reach for a token first; a `dark:`
+ * utility is invisible to the custom themes unless they share an appearance.
+ */
+@custom-variant dark (&:where([data-appearance='dark'], [data-appearance='dark'] *));
+
+@theme inline {
+  /* Surfaces */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-disabled: var(--surface-disabled);
+  --color-overlay: var(--overlay);
+
+  /* Foreground, most to least prominent */
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-faint: var(--fg-faint);
+  --color-fg-disabled: var(--fg-disabled);
+  --color-on-accent: var(--on-accent);
+
+  /* Hairlines */
+  --color-line-subtle: var(--line-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  /* Accent — primary buttons, links, selection, focus */
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-fg: var(--accent-soft-fg);
+  --color-focus: var(--focus);
+
+  /* Danger — destructive actions and validation failures */
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-fg: var(--danger-soft-fg);
+  --color-danger-line: var(--danger-line);
+  --color-focus-danger: var(--focus-danger);
+
+  /* Status badges */
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-fg: var(--success-soft-fg);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-fg: var(--warning-soft-fg);
+
+  /*
+   * HTTP method colours. Tokens rather than palette utilities for the same
+   * reason as everything else, but also because they are the one place a
+   * theme is most likely to want a different hue family — they carry meaning,
+   * so a theme that cannot re-tune them is not really a theme.
+   */
+  --color-method-get: var(--method-get);
+  --color-method-post: var(--method-post);
+  --color-method-put: var(--method-put);
+  --color-method-patch: var(--method-patch);
+  --color-method-delete: var(--method-delete);
+  --color-method-other: var(--method-other);
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * light — the base. Unthemed HTML falls back to this, which is why it lives on
+ * bare `:root` rather than in a `[data-theme='light']` block.
+ * ---------------------------------------------------------------------------
+ */
+:root {
+  color-scheme: light;
+
+  --canvas: #f8fafc;
+  --surface: #ffffff;
+  --surface-muted: #f1f5f9;
+  --surface-disabled: #cbd5e1;
+  --overlay: rgb(15 23 42 / 0.3);
+
+  --fg: #0f172a;
+  --fg-muted: #334155;
+  --fg-subtle: #64748b;
+  --fg-faint: #7c8a9e;
+  --fg-disabled: #475569;
+  --on-accent: #ffffff;
+
+  --line-subtle: #f1f5f9;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef2ff;
+  --accent-soft-fg: #3730a3;
+  --focus: #c7d2fe;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-soft: #fef2f2;
+  --danger-soft-fg: #b91c1c;
+  --danger-line: #fecaca;
+  --focus-danger: #fecaca;
+
+  --success-soft: #d1fae5;
+  --success-soft-fg: #065f46;
+  --warning-soft: #fef3c7;
+  --warning-soft-fg: #92400e;
+
+  --method-get: #047857;
+  --method-post: #b45309;
+  --method-put: #1d4ed8;
+  --method-patch: #6d28d9;
+  --method-delete: #b91c1c;
+  --method-other: #64748b;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * dark
+ *
+ * Not an inversion of light. Text steps *down* in weight as it gets less
+ * prominent (#e6edf6 -> #6b7a91) rather than up, and the soft fills are
+ * translucent so they tint whatever surface they land on instead of fighting
+ * it.
+ *
+ * The accent is indigo-400, not the light theme's indigo-600: a mid-tone
+ * indigo goes muddy against a dark canvas and drops to 3.8:1 as link text.
+ * Going brighter fixes the link but breaks the button, since white on
+ * indigo-400 is 2.98:1 -- so `--on-accent` flips dark here, exactly as it does
+ * in midnight. Both roles clear 4.5:1 that way; neither does otherwise.
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --canvas: #0b1220;
+  --surface: #151c2b;
+  --surface-muted: #1d2739;
+  --surface-disabled: #313d52;
+  --overlay: rgb(2 6 23 / 0.65);
+
+  --fg: #e6edf6;
+  --fg-muted: #c3cddc;
+  --fg-subtle: #93a1b5;
+  --fg-faint: #6b7a91;
+  --fg-disabled: #93a1b5;
+  --on-accent: #0f172a;
+
+  --line-subtle: #1d2739;
+  --line: #27324a;
+  --line-strong: #3a4761;
+
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: rgb(129 140 248 / 0.18);
+  --accent-soft-fg: #c7d2fe;
+  --focus: rgb(129 140 248 / 0.45);
+
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-soft: rgb(248 113 113 / 0.14);
+  --danger-soft-fg: #fca5a5;
+  --danger-line: rgb(248 113 113 / 0.35);
+  --focus-danger: rgb(248 113 113 / 0.4);
+
+  --success-soft: rgb(16 185 129 / 0.16);
+  --success-soft-fg: #6ee7b7;
+  --warning-soft: rgb(245 158 11 / 0.16);
+  --warning-soft-fg: #fcd34d;
+
+  --method-get: #34d399;
+  --method-post: #fbbf24;
+  --method-put: #60a5fa;
+  --method-patch: #a78bfa;
+  --method-delete: #f87171;
+  --method-other: #93a1b5;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * midnight — true black for OLED, neutral greys, cyan accent.
+ * ---------------------------------------------------------------------------
+ */
+:root[data-theme='midnight'] {
+  color-scheme: dark;
+
+  --canvas: #000000;
+  --surface: #0c0c0f;
+  --surface-muted: #16161b;
+  --surface-disabled: #2a2a33;
+  --overlay: rgb(0 0 0 / 0.75);
+
+  --fg: #f2f2f4;
+  --fg-muted: #c9c9d1;
+  --fg-subtle: #9a9aa6;
+  --fg-faint: #6f6f7c;
+  --fg-disabled: #9a9aa6;
+  /* Dark text on a bright cyan fill — white would not clear 4.5:1 here. */
+  --on-accent: #04121a;
+
+  --line-subtle: #151519;
+  --line: #23232b;
+  --line-strong: #373743;
+
+  --accent: #22d3ee;
+  --accent-hover: #67e8f9;
+  --accent-soft: rgb(34 211 238 / 0.16);
+  --accent-soft-fg: #a5f3fc;
+  --focus: rgb(34 211 238 / 0.4);
+
+  --danger: #fb7185;
+  --danger-hover: #fda4af;
+  --danger-soft: rgb(251 113 133 / 0.14);
+  --danger-soft-fg: #fda4af;
+  --danger-line: rgb(251 113 133 / 0.35);
+  --focus-danger: rgb(251 113 133 / 0.4);
+
+  --success-soft: rgb(74 222 128 / 0.16);
+  --success-soft-fg: #86efac;
+  --warning-soft: rgb(250 204 21 / 0.16);
+  --warning-soft-fg: #fde047;
+
+  --method-get: #4ade80;
+  --method-post: #fbbf24;
+  --method-put: #38bdf8;
+  --method-patch: #c084fc;
+  --method-delete: #fb7185;
+  --method-other: #9a9aa6;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * paper — a warm light theme. It exists to prove the token layer is not
+ * secretly a light/dark boolean: it re-points the accent to amber and every
+ * neutral to a warm grey without touching a single component.
+ * ---------------------------------------------------------------------------
+ */
+:root[data-theme='paper'] {
+  color-scheme: light;
+
+  --canvas: #f7f3ec;
+  --surface: #fffdf8;
+  --surface-muted: #efe8dc;
+  --surface-disabled: #d8cebd;
+  --overlay: rgb(61 48 32 / 0.32);
+
+  --fg: #2c2418;
+  --fg-muted: #4d4231;
+  --fg-subtle: #7a6c56;
+  --fg-faint: #87775c;
+  --fg-disabled: #5c503c;
+  --on-accent: #ffffff;
+
+  --line-subtle: #efe8dc;
+  --line: #e2d8c7;
+  --line-strong: #cdbfa8;
+
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --accent-soft: #fdf0dc;
+  --accent-soft-fg: #7c3d06;
+  --focus: #f5d9a8;
+
+  --danger: #b91c1c;
+  --danger-hover: #991b1b;
+  --danger-soft: #fbeae6;
+  --danger-soft-fg: #991b1b;
+  --danger-line: #edc9c0;
+  --focus-danger: #f0cfc7;
+
+  --success-soft: #dcecd8;
+  --success-soft-fg: #2f5d2a;
+  --warning-soft: #f8ebc8;
+  --warning-soft-fg: #7c5a11;
+
+  --method-get: #2f6b46;
+  --method-post: #a15c07;
+  --method-put: #1e4f8a;
+  --method-patch: #6b3fa0;
+  --method-delete: #a12626;
+  --method-other: #7a6c56;
+}
+
+@layer base {
+  /*
+   * The shells paint `bg-canvas` themselves, but the body needs it too: the
+   * overscroll gutter and any moment before React mounts are outside every
+   * component, and a white flash there is exactly what a dark theme is for.
+   */
+  body {
+    background-color: var(--canvas);
+    color: var(--fg);
+  }
+
+  /*
+   * Form controls are themed here rather than class-by-class. Most inputs in
+   * this app declare a border and no background, which under a dark theme
+   * would leave the user agent to pick one — usually a grey that matches
+   * nothing. `bg-transparent` at the utility layer still wins over this
+   * (KeyValueEditor relies on that), since utilities sort after base.
+   */
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    background-color: var(--surface);
+    color: var(--fg);
+  }
+
+  /* Native dropdown popups: `color-scheme` covers most browsers, not all. */
+  option {
+    background-color: var(--surface);
+    color: var(--fg);
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--accent);
+  }
+
+  ::placeholder {
+    color: var(--fg-faint);
+    opacity: 1;
+  }
+
+  ::selection {
+    background-color: var(--accent-soft);
+    color: var(--accent-soft-fg);
+  }
+}
