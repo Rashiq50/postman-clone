@@ -33,9 +33,20 @@ function emptyBody(mode: RequestBodyMode): RequestBody {
 export function BodyTab({
   body,
   onChange,
+  workspaceId,
 }: {
   body: RequestBody
   onChange: (body: RequestBody) => void
+  /**
+   * Forwarded to the form-urlencoded grid, whose cells resolve `{{variables}}`.
+   *
+   * ⚠️ The raw/JSON `<textarea>` below is deliberately **not** a
+   * `VariableInput`. A multi-line variant is a different problem — wrapping,
+   * vertical scroll sync, and a paste that must *not* collapse newlines — and
+   * it is not built. Variables still interpolate into the body when sent; they
+   * are simply not highlighted here yet.
+   */
+  workspaceId: string | undefined
 }) {
   const [formatError, setFormatError] = useState<string | null>(null)
 
@@ -96,6 +107,7 @@ export function BodyTab({
         <KeyValueEditor
           entries={body.entries}
           keyPlaceholder="Field"
+          workspaceId={workspaceId}
           onChange={(entries) => onChange({ mode: 'form-urlencoded', entries })}
         />
       )}

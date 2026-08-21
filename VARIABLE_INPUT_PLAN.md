@@ -1,7 +1,9 @@
 # VariableInput — a variable-aware text input
 
-Status: **shipped**, in the URL bar. The component is built to drop into the
-Params, Headers and Auth fields next; see *Not built here*.
+Status: **shipped**. In the URL bar, the Params and Headers cells (keys *and*
+values), the form-urlencoded body fields, and every Auth field. The raw/JSON
+body textarea and the Scripts tab are deliberately excluded — see
+*Not built here*.
 
 ## Why
 
@@ -42,8 +44,25 @@ packages/contracts/src/variables.ts        the regex, tokenize, buildVariables
             |- variableInput/VariablePopover.tsx
 ```
 
-`RequestUrlBar` is the only call site; it takes `workspaceId` from
-`RequestEditor`, which already has it from `useParams`.
+Call sites, all fed `workspaceId` from `RequestEditor`, which has it from
+`useParams`:
+
+| Where | File | Notes |
+|---|---|---|
+| URL | `RequestUrlBar.tsx` | |
+| Params, Headers | `KeyValueEditor.tsx` | key **and** value cells |
+| form-urlencoded body | `KeyValueEditor.tsx` via `BodyTab` | same grid |
+| Auth (5 fields) | `AuthTab.tsx` | 3 of them masked, with Show/Hide |
+
+⚠️ **The grid's key cells get chips too, not just the values.** `applyEntries`
+in `interpolate.ts` substitutes into the key as well, so highlighting one and
+not the other would misreport what the send path does.
+
+⚠️ **Every cell subscribes to the environment queries for itself** rather than
+taking a resolved `Map` as a prop. Those queries are already cached by the
+header's picker, so it costs a subscription and not a fetch — and a `Map` passed
+down would hand every row a new prop identity on each environment edit. If a
+grid ever grows to hundreds of rows, a context is the first thing to reach for.
 
 ## The decisions, and their traps
 
@@ -95,8 +114,24 @@ dropped; paste is intercepted so a multi-line clipboard collapses to one line;
 and `white-space: pre` — not `nowrap`, which collapses runs of spaces and would
 make the DOM value stop matching React's.
 
-The one thing it cannot be is `type="password"`, which is why Auth is not
-converted here.
+### Masking, for the Auth fields
+
+A `contenteditable` cannot be `type="password"`, so the three secret auth fields
+use `-webkit-text-security: disc` behind a `secret` prop, plus a Show/Hide
+toggle mirroring the one on `LoginPage` down to its `aria-pressed` and
+`aria-controls` wiring.
+
+⚠️ This trades away nothing, and the reason is already written down: `AuthTab`
+records that its masking is **cosmetic only** — `GET /requests/:id` hands the
+token back in plaintext regardless. A CSS mask is exactly as strong as the input
+type it replaces.
+
+⚠️ **A chip's background survives the mask, on purpose.** A row of dots tells you
+nothing about whether your credential is a literal or a `{{variable}}`, and that
+is precisely the thing worth knowing about a field you cannot read — sending the
+literal string `{{authToken}}` as a bearer token is the failure this prevents.
+A bearer token is also the single most likely value in the editor to *be* a
+variable, since it is the one nobody wants committed to a shared collection.
 
 ### No new dependency
 
@@ -139,12 +174,14 @@ interactive" colour. No new token, so no new `PAIRS` entry.
 
 ## Not built here
 
-- **Params, Headers, Auth.** The component drops in, but Auth needs a decision
-  first: `type="password"` has no contenteditable equivalent, so those fields
-  need either a reveal toggle or a text-security treatment.
-- **Body and Scripts textareas** — multi-line wrapping and scroll sync are a
-  different problem, and variables in Scripts are meaningless while scripts are
-  never executed.
+- **The raw/JSON body textarea.** A multi-line variant is a genuinely different
+  problem — wrapping, vertical scroll sync, and a paste that must *not* collapse
+  newlines, which is the opposite of what the single-line field does. Variables
+  still interpolate into the body when sent; they are simply not highlighted
+  while you type it.
+- **The Scripts tab.** Scripts are stored and never executed, so a `{{var}}`
+  there is interpolated by nothing and a chip claiming otherwise would be a
+  lie. Its banner stays until a sandbox exists.
 - **Collection and global scopes.** `buildVariables` takes an ordered list and
   only `environment` is ever passed; both sides keep that shape so a new scope
   is one array entry, not a rewrite.

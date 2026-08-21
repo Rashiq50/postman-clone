@@ -3,7 +3,9 @@ import {
   type RequestAuth,
   type RequestAuthType,
 } from '@postman-clone/contracts'
+import { useState } from 'react'
 import { Select } from '../../components/ui/Select'
+import { VariableInput } from '../../components/ui/VariableInput'
 
 function emptyAuth(type: RequestAuthType): RequestAuth {
   switch (type) {
@@ -21,7 +23,68 @@ function emptyAuth(type: RequestAuthType): RequestAuth {
 }
 
 const fieldClass =
-  'w-full rounded-md border border-line-strong px-3 py-2 font-mono text-sm outline-none focus:border-accent'
+  'w-full rounded-md border border-line-strong bg-surface px-3 py-2 font-mono text-sm outline-none focus:border-accent'
+
+/**
+ * One auth field.
+ *
+ * ⚠️ A masked field is a `VariableInput` with `secret`, **not** an
+ * `<input type="password">` — and the Show/Hide toggle is what makes that
+ * honest rather than a downgrade. It mirrors the one on `LoginPage`, down to
+ * the `aria-pressed`/`aria-controls` wiring, because a person who has just met
+ * it there should not have to learn a second affordance here.
+ *
+ * The reason a token field of all things gets variable chips: a bearer token is
+ * the single most likely value in the whole editor to be a `{{variable}}`,
+ * because it is the one nobody wants committed to a shared collection. Masking
+ * it as an opaque row of dots and giving no signal about whether it resolves is
+ * how you end up sending the literal string `{{authToken}}` as your credential.
+ */
+function AuthField({
+  label,
+  value,
+  onChange,
+  workspaceId,
+  secret = false,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  workspaceId: string | undefined
+  secret?: boolean
+}) {
+  const [revealed, setRevealed] = useState(false)
+  const fieldId = `auth-${label.toLowerCase().replace(/\s+/g, '-')}`
+
+  return (
+    <div className="space-y-1">
+      <span className="text-xs font-medium text-fg-muted">{label}</span>
+      <div className="relative">
+        <VariableInput
+          id={fieldId}
+          value={value}
+          onChange={onChange}
+          workspaceId={workspaceId}
+          label={label}
+          secret={secret && !revealed}
+          className={secret ? `${fieldClass} pr-16` : fieldClass}
+        />
+        {secret && (
+          <button
+            type="button"
+            onClick={() => setRevealed((shown) => !shown)}
+            aria-controls={fieldId}
+            aria-pressed={revealed}
+            aria-label={revealed ? `Hide ${label}` : `Show ${label}`}
+            className="absolute inset-y-0 right-0 rounded-r-md px-3 text-xs font-medium text-fg-subtle transition hover:text-fg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            {revealed ? 'Hide' : 'Show'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 /**
  * ⚠️ The `type="password"` fields here are **cosmetic only**. These values are
@@ -34,9 +97,12 @@ const fieldClass =
 export function AuthTab({
   auth,
   onChange,
+  workspaceId,
 }: {
   auth: RequestAuth
   onChange: (auth: RequestAuth) => void
+  /** For resolving `{{variables}}` in the fields — see `VariableInput`. */
+  workspaceId: string | undefined
 }) {
   return (
     <div className="max-w-md space-y-3">
@@ -60,62 +126,48 @@ export function AuthTab({
       )}
 
       {auth.type === 'bearer' && (
-        <label className="block space-y-1">
-          <span className="text-xs font-medium text-fg-muted">Token</span>
-          <input
-            type="password"
-            value={auth.token}
-            onChange={(e) => onChange({ type: 'bearer', token: e.target.value })}
-            className={fieldClass}
-          />
-        </label>
+        <AuthField
+          label="Token"
+          secret
+          value={auth.token}
+          workspaceId={workspaceId}
+          onChange={(token) => onChange({ type: 'bearer', token })}
+        />
       )}
 
       {auth.type === 'basic' && (
         <>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-fg-muted">Username</span>
-            <input
-              value={auth.username}
-              onChange={(e) =>
-                onChange({ ...auth, username: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-fg-muted">Password</span>
-            <input
-              type="password"
-              value={auth.password}
-              onChange={(e) =>
-                onChange({ ...auth, password: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </label>
+          <AuthField
+            label="Username"
+            value={auth.username}
+            workspaceId={workspaceId}
+            onChange={(username) => onChange({ ...auth, username })}
+          />
+          <AuthField
+            label="Password"
+            secret
+            value={auth.password}
+            workspaceId={workspaceId}
+            onChange={(password) => onChange({ ...auth, password })}
+          />
         </>
       )}
 
       {auth.type === 'apiKey' && (
         <>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-fg-muted">Key</span>
-            <input
-              value={auth.key}
-              onChange={(e) => onChange({ ...auth, key: e.target.value })}
-              className={fieldClass}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-fg-muted">Value</span>
-            <input
-              type="password"
-              value={auth.value}
-              onChange={(e) => onChange({ ...auth, value: e.target.value })}
-              className={fieldClass}
-            />
-          </label>
+          <AuthField
+            label="Key"
+            value={auth.key}
+            workspaceId={workspaceId}
+            onChange={(key) => onChange({ ...auth, key })}
+          />
+          <AuthField
+            label="Value"
+            secret
+            value={auth.value}
+            workspaceId={workspaceId}
+            onChange={(value) => onChange({ ...auth, value })}
+          />
           <label className="block space-y-1">
             <span className="text-xs font-medium text-fg-muted">Add to</span>
             <Select

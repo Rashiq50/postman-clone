@@ -574,6 +574,23 @@
     display: none;
   }
 
+  /*
+   * The masked variant, for the auth fields.
+   *
+   * ⚠️ `-webkit-text-security` is what a `contenteditable` has instead of
+   * `type="password"`, and it is exactly as strong: which is to say, not at all.
+   * `AuthTab` already records that its masking is cosmetic — the value is
+   * stored and sent in plaintext regardless — so this trades nothing away. The
+   * prefix is unfortunate but it is the only spelling any engine implements.
+   *
+   * The chip backgrounds survive the mask on purpose: the dots tell you nothing
+   * about whether a token is a literal or a `{{variable}}`, and that is the one
+   * thing worth knowing about a field you cannot read.
+   */
+  .variable-input-secret {
+    -webkit-text-security: disc;
+  }
+
   .variable-input:empty::before {
     content: attr(data-placeholder);
     color: var(--fg-faint);

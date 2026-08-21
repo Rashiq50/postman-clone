@@ -50,14 +50,18 @@ import { useUndoStack, type Snapshot } from './variableInput/useUndoStack'
  * fields are not converted in this slice.
  */
 export function VariableInput({
+  id,
   value,
   onChange,
   workspaceId,
   label,
   placeholder,
   className = '',
+  secret = false,
   onKeyDown,
 }: {
+  /** Only needed when something else must `aria-controls` this field. */
+  id?: string
   value: string
   onChange: (value: string) => void
   /** Undefined outside a workspace route: chips then all read as undefined. */
@@ -66,6 +70,19 @@ export function VariableInput({
   label: string
   placeholder?: string
   className?: string
+  /**
+   * Masks the glyphs, for the auth fields.
+   *
+   * ⚠️ Exactly as strong as the `type="password"` it replaces, which `AuthTab`
+   * already documents as **cosmetic only**: the value is stored and returned in
+   * plaintext by `GET /requests/:id` either way. It hides the token from
+   * someone reading over your shoulder and from nothing else.
+   *
+   * A chip's *background* still shows through the mask, deliberately — knowing
+   * that a masked token is `{{apiKey}}` rather than a literal is the whole
+   * reason to put this component on an auth field at all.
+   */
+  secret?: boolean
   /** Bubbles keys the field did not consume (Ctrl+Enter to send, and so on). */
   onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void
 }) {
@@ -342,6 +359,7 @@ export function VariableInput({
     <>
       <div
         ref={hostRef}
+        id={id}
         contentEditable="plaintext-only"
         suppressContentEditableWarning
         role="combobox"
@@ -370,7 +388,9 @@ export function VariableInput({
         onBlur={closeSuggestions}
         onMouseOver={handleMouseOver}
         onMouseLeave={scheduleClose}
-        className={`variable-input ${className}`}
+        className={`variable-input${
+          secret ? ' variable-input-secret' : ''
+        } ${className}`}
       />
 
       {suggest && (

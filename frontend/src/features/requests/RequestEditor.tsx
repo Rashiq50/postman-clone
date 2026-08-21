@@ -465,6 +465,7 @@ export function RequestEditor() {
               <KeyValueEditor
                 entries={draft.queryParams}
                 keyPlaceholder="Parameter"
+                workspaceId={workspaceId}
                 onChange={(queryParams) => patch({ queryParams })}
               />
             </Tabs.Content>
@@ -472,14 +473,23 @@ export function RequestEditor() {
               <KeyValueEditor
                 entries={draft.headers}
                 keyPlaceholder="Header"
+                workspaceId={workspaceId}
                 onChange={(headers) => patch({ headers })}
               />
             </Tabs.Content>
             <Tabs.Content value="Body" className="focus-visible:outline-none">
-              <BodyTab body={draft.body} onChange={(body) => patch({ body })} />
+              <BodyTab
+                body={draft.body}
+                workspaceId={workspaceId}
+                onChange={(body) => patch({ body })}
+              />
             </Tabs.Content>
             <Tabs.Content value="Auth" className="focus-visible:outline-none">
-              <AuthTab auth={draft.auth} onChange={(auth) => patch({ auth })} />
+              <AuthTab
+                auth={draft.auth}
+                workspaceId={workspaceId}
+                onChange={(auth) => patch({ auth })}
+              />
             </Tabs.Content>
             <Tabs.Content value="Scripts" className="focus-visible:outline-none">
               <ScriptsTab
