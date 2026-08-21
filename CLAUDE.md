@@ -216,6 +216,24 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
   `from` handling, and no client-side rule the server does not also enforce. Its validation is a
   courtesy; `passwordProblem` is imported from contracts precisely so it cannot drift from the
   DTO. `register` is in `NEVER_REAUTH` — a failure there is the answer, not a stale token.
+- ⚠️ **That mirroring is now structural, not a review rule.** Everything the two screens share
+  outside their field lists lives in [AuthLayout.tsx](frontend/src/features/auth/AuthLayout.tsx)
+  (the `lg:` split, the brand panel, the heading block, the footer link, the `ThemeMenu`) and
+  [AuthField.tsx](frontend/src/features/auth/AuthField.tsx) (`AuthField`, `AuthCard`,
+  `SubmitButton`, `FormError`). A visual change made to one screen's markup was the origin of
+  every past divergence; there is no longer a one-screen place to make one. The glyphs are
+  hand-written inline SVG in [AuthArt.tsx](frontend/src/features/auth/AuthArt.tsx) — same call as
+  `NodeIcon`, no icon library. `AuthField` owns its own reveal state, which is what removed
+  `RegisterPage`'s two copy-pasted `showPassword` pairs.
+  - The brand panel is `hidden lg:flex`: on a phone it would push the form below the fold, and
+    the form is the only reason anyone is on the screen.
+  - ⚠️ Every colour is still a token, including the panel's sample-request preview (it reuses
+    the `method-*` and `success-soft` pairs `yarn contrast` already audits), so the facelift
+    added **no token and no `PAIRS` entry**. A palette utility here would pin the first screen
+    anyone sees to light mode.
+  - The card takes `glass`, not `glass-tint`: the canvas wash passes behind it and nothing
+    `position: fixed` lives inside it, which is the pair of conditions *Theming* sets for
+    spending a backdrop blur.
 - Before dispatching `loggedOut()`, `baseQueryWithReauth` checks the access token is still the one the
   request failed under. A refresh that resolves after a login completed is stale and must not wipe the
   new session. Don't "simplify" that check away.
