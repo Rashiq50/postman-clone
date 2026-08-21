@@ -1,5 +1,6 @@
 import type { ApiRequest, UpdateApiRequestInput } from '@postman-clone/contracts'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { paramsFromUrl, seedUrl } from './urlQuery'
 
 /** The editable subset of a request. Ids and timestamps are not draftable. */
 export type RequestDraft = Pick<
@@ -16,13 +17,22 @@ export type RequestDraft = Pick<
 >
 
 function toDraft(request: ApiRequest): RequestDraft {
+  // The URL bar and the Params table are kept in sync from here on
+  // (see urlQuery.ts), so the seed must already satisfy the invariant: a row
+  // stored before the sync existed lives only in the table, and seeding the
+  // bare `request.url` would show a URL missing params the send path appends —
+  // then the first keystroke in the bar would re-derive the table from it and
+  // wipe them. `seedUrl` folds those rows into the URL once; `paramsFromUrl`
+  // then makes the table mirror it (a no-op identity for rows saved after the
+  // sync). Baseline is built from the same seed, so this never reads as dirty.
+  const url = seedUrl(request.url, request.queryParams)
   return {
     name: request.name,
     method: request.method,
-    url: request.url,
+    url,
     description: request.description,
     headers: request.headers,
-    queryParams: request.queryParams,
+    queryParams: paramsFromUrl(url, request.queryParams),
     body: request.body,
     auth: request.auth,
     scripts: request.scripts,

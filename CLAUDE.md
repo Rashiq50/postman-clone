@@ -342,6 +342,24 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   returns a new object identity on every background refetch, so depending on the object wipes
   whatever the user was typing — intermittent, and presents as a dropped keystroke. There is no
   autosave either: autosave plus a tree that invalidates on renames is a refetch storm.
+- **The URL bar and the Params table are two views of one query string**, synced both ways by
+  the pure helpers in [urlQuery.ts](frontend/src/features/requests/urlQuery.ts). The URL text is
+  canonical: typing in the bar re-derives the table (a positional merge that preserves disabled
+  rows — they exist only in the table); editing the table rewrites only the URL's query section.
+  Each direction is a single `patch` inside its own event handler — **no effect watches one side
+  to write the other**, which is what makes a parse→serialize feedback loop (rewriting the bar
+  under the caret) structurally impossible. Parsing is plain string splitting, never `new URL()`
+  (`{{variables}}` fail it) and never percent-decode/encode (`encodeURIComponent` mangles `{{`).
+  - ⚠️ **`runSend` passes `queryParams: []`, explicitly.** Every enabled row is already in
+    `draft.url`, and the server *appends* the table it receives onto the URL's own query — so
+    sending the rows doubles every param. It must be `[]`, not omitted: `undefined` falls back
+    to the *stored* rows server-side (`draft.queryParams ?? stored.queryParams`) and doubles
+    them just the same.
+  - ⚠️ **`toDraft` seeds through `seedUrl` + `paramsFromUrl`.** A request saved before the sync
+    holds params only in the table; seeding the bare stored URL would display a URL missing them
+    and the first keystroke in the bar would then re-derive the table and silently wipe them.
+    `seedUrl` matches by whole `key=value` pair (a multiset), so re-opening a post-sync request
+    does not grow its URL. Baseline is built from the same seed, so seeding never reads as dirty.
 - **The request editor's chrome states what the draft is doing, because nothing else can.**
   With no autosave, a saved request and an edited one look identical otherwise — and Send
   makes that *more* pressing, not less, since Send deliberately fires the draft. So

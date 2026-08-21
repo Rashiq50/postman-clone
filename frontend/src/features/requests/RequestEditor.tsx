@@ -20,6 +20,7 @@ import { useGetExecutionQuery } from './executionsApi'
 import { useGetRequestQuery, useUpdateRequestMutation } from './requestsApi'
 import { useRequestDraft } from './useRequestDraft'
 import { useSendRequest } from './useSendRequest'
+import { paramsFromUrl, urlWithParams } from './urlQuery'
 
 const TABS = ['Params', 'Headers', 'Body', 'Auth', 'Scripts'] as const
 type Tab = (typeof TABS)[number]
@@ -216,7 +217,14 @@ export function RequestEditor() {
       method: draft.method,
       url: draft.url,
       headers: draft.headers,
-      queryParams: draft.queryParams,
+      // ⚠️ Empty **on purpose, and explicitly**. The Params table and the URL
+      // are two views of one query string (urlQuery.ts), so every enabled row
+      // is already in `draft.url` — and the server *appends* whatever table it
+      // receives onto the URL's query, so sending the rows doubles each param.
+      // It must be `[]`, not omitted: `undefined` falls back to the *stored*
+      // rows server-side (`draft.queryParams ?? stored.queryParams`), which
+      // doubles them just the same.
+      queryParams: [],
       body: draft.body,
       auth: draft.auth,
     })
@@ -388,7 +396,12 @@ export function RequestEditor() {
           isSaving={isSaving}
           isSending={isSending}
           onMethodChange={(method) => patch({ method })}
-          onUrlChange={(url) => patch({ url })}
+          // One patch carries both sides of the URL↔Params sync: the table is
+          // re-derived from the text, the text itself is stored **verbatim** —
+          // never re-serialised, so nothing rewrites the bar under the caret.
+          onUrlChange={(url) =>
+            patch({ url, queryParams: paramsFromUrl(url, draft.queryParams) })
+          }
           onSave={() => void save()}
           onSend={runSend}
           onCancelSend={cancelSend}
@@ -462,11 +475,17 @@ export function RequestEditor() {
         <div className="min-h-0 flex-1 overflow-auto p-4">
           <div className="rounded-lg border border-line bg-surface p-4 glass-tint">
             <Tabs.Content value="Params" className="focus-visible:outline-none">
+              {/* The mirror of `onUrlChange` above: a table edit rewrites the
+                  URL's query section in the same patch. Only this direction
+                  touches the URL text, and only its query — base and fragment
+                  stay as typed. */}
               <KeyValueEditor
                 entries={draft.queryParams}
                 keyPlaceholder="Parameter"
                 workspaceId={workspaceId}
-                onChange={(queryParams) => patch({ queryParams })}
+                onChange={(queryParams) =>
+                  patch({ queryParams, url: urlWithParams(draft.url, queryParams) })
+                }
               />
             </Tabs.Content>
             <Tabs.Content value="Headers" className="focus-visible:outline-none">
