@@ -1,8 +1,10 @@
 import type {
   AuthResponse,
   AuthUser,
+  ChangePasswordInput,
   LoginInput,
   RegisterInput,
+  UpdateProfileInput,
 } from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 import { credentialsReceived, loggedOut, userLoaded } from './authSlice'
@@ -100,6 +102,50 @@ export const authApi = baseApi.injectEndpoints({
       },
     }),
 
+    /**
+     * The profile edit.
+     *
+     * ⚠️ It feeds `authSlice` through `onQueryStarted` like every other
+     * endpoint here, and it must: the header renders the user's name out of the
+     * slice, so a rename that only invalidated the `Me` tag would leave the old
+     * name in the header until something happened to refetch — which looks like
+     * the save silently failed.
+     *
+     * `invalidatesTags: ['Me']` as well, for any subscriber reading the query
+     * rather than the slice. The two are not redundant: the slice is the
+     * synchronous copy the chrome reads, the tag is the cache.
+     */
+    updateProfile: builder.mutation<AuthUser, UpdateProfileInput>({
+      query: (body) => ({ url: 'auth/me', method: 'PATCH', body }),
+      invalidatesTags: ['Me'],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          dispatch(userLoaded((await queryFulfilled).data))
+        } catch {
+          // Surfaced through the mutation's own `error`.
+        }
+      },
+    }),
+
+    /**
+     * ⚠️ **This revokes the account's other sessions server-side**, so the
+     * `Session` tag is invalidated — the sessions list is otherwise showing
+     * devices that have just been signed out, and it is the very screen next
+     * door.
+     *
+     * ⚠️ It does *not* touch `authSlice`. The server deliberately spares the
+     * caller's own session, so this tab's access token stays valid and a
+     * `loggedOut()` here would sign the user out of the change they just made.
+     */
+    changePassword: builder.mutation<void, ChangePasswordInput>({
+      query: (body) => ({
+        url: 'auth/change-password',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Session'],
+    }),
+
     me: builder.query<AuthUser, void>({
       query: () => ({ url: 'auth/me' }),
       providesTags: ['Me'],
@@ -116,9 +162,11 @@ export const authApi = baseApi.injectEndpoints({
 })
 
 export const {
+  useChangePasswordMutation,
   useLoginMutation,
   useLogoutMutation,
   useLogoutAllMutation,
   useMeQuery,
-  useRegisterMutation
+  useRegisterMutation,
+  useUpdateProfileMutation,
 } = authApi

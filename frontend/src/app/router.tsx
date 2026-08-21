@@ -4,6 +4,8 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { RequireAuth } from '../features/auth/RequireAuth'
 import { EmptyEditorState } from '../features/requests/EmptyEditorState'
 import { RequestEditor } from '../features/requests/RequestEditor'
+import { ProfileLayout } from '../features/profile/ProfileLayout'
+import { ProfilePage } from '../features/profile/ProfilePage'
 import { SessionsPage } from '../features/sessions/SessionsPage'
 import { WorkspaceGuard } from '../features/workspaces/WorkspaceGuard'
 import { WorkspaceRedirect } from '../features/workspaces/WorkspaceRedirect'
@@ -16,7 +18,7 @@ import { WorkbenchShell } from './WorkbenchShell'
  * data stays in RTK Query hooks.
  *
  * Two shells sit inside the one `RequireAuth`: the workbench, whose panes
- * scroll independently, and the centred `AppShell` that `/sessions` uses.
+ * scroll independently, and the centred `AppShell` that `/profile` uses.
  * `/login` and `/register` stay outside it, unchanged.
  *
  * The workspace id is a **route param**, not Redux state — see
@@ -56,7 +58,28 @@ export const router = createBrowserRouter([
       },
       {
         element: <AppShell />,
-        children: [{ path: 'sessions', element: <SessionsPage /> }],
+        children: [
+          {
+            // `/profile` and `/profile/sessions`. Sessions is a sub-page of the
+            // account rather than a peer of the workspace: it is a list of
+            // *your devices*, which is a profile concern, and the top-level nav
+            // it used to occupy is gone.
+            path: 'profile',
+            element: <ProfileLayout />,
+            children: [
+              { index: true, element: <ProfilePage /> },
+              { path: 'sessions', element: <SessionsPage /> },
+            ],
+          },
+          // ⚠️ The old path is kept as a redirect, not deleted. It is the one
+          // route in this app a user is likely to have bookmarked, and the
+          // catch-all below would otherwise silently land them on the workspace
+          // with no hint that their link moved.
+          {
+            path: 'sessions',
+            element: <Navigate to="/profile/sessions" replace />,
+          },
+        ],
       },
       // Sits above both shells and points at `/`, so a mistyped URL lands on
       // the workspace rather than on a 404.

@@ -16,6 +16,35 @@ export interface AuthUser {
   createdAt: string;
 }
 
+/**
+ * A profile edit. Every field is optional — the client sends only what the
+ * user changed, exactly as `UpdateRequestInput` does.
+ *
+ * ⚠️ `currentPassword` is **required by the server whenever `email` changes**,
+ * and ignored otherwise. Changing the address a password reset would be sent
+ * to is an account-takeover step, so it is re-authenticated even though a live
+ * access token is already proving who the caller is. Renaming yourself is not,
+ * and demanding a password for it would train the reflex that this prompt is
+ * noise.
+ */
+export interface UpdateProfileInput {
+  name?: string;
+  email?: string;
+  currentPassword?: string;
+}
+
+/**
+ * ⚠️ Deliberately its own input and its own endpoint rather than a `password`
+ * field on `UpdateProfileInput`. A password change revokes the account's other
+ * sessions and a profile edit does not, so folding them together would make one
+ * request that sometimes signs your other devices out — invisible in the type
+ * and impossible to document at the call site.
+ */
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
 /** The refresh token never appears here — it travels only in the httpOnly cookie. */
 export interface AuthResponse {
   accessToken: string;

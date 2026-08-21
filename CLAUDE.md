@@ -116,6 +116,51 @@ The e2e test asserts this — it fails if the global guard is removed.
 Dev seed user (from migration `AddUserNameAndSeedTestUser`, upgraded to Argon2 by a later one):
 `rashiqrahaman@yahoo.com` / `Password123!`.
 
+### Profile edits
+
+`PATCH /auth/me` and `POST /auth/change-password` back the `/profile` screen. Both take the
+user id from `@CurrentUser()` only — there is deliberately **no `PATCH /users/:id`**, because
+an id in the path is an authorization question these endpoints cannot even be asked.
+
+- ⚠️ **An email change is re-authenticated; a rename is not.** The address is where a reset
+  would be sent, so changing it is an account-takeover step and a live access token is not
+  enough on its own — a borrowed unlocked laptop has one. Prompting for a password on a
+  *rename* is what would make the prompt worthless: it trains the reflex to type a password
+  into whatever asks. The check compares against the **stored** value (`changes.email !==
+  user.email`), so a form resending an unchanged address does not trip it.
+- ⚠️ **`@NormalizeEmail()` is on `UpdateProfileDto` too.** It is on `LoginDto` and
+  `RegisterDto` for one reason — `findByEmail` is an exact match, so a stored address whose
+  casing differs from what the user later types is a **silent permanent lockout** — and this
+  is the one endpoint that can change an address after the fact, which makes it the easiest to
+  forget and the worst to get wrong.
+- ⚠️ **`currentPassword` carries no strength constraint**, only `MaxLength`. Running the policy
+  on it would reject a password that was legal when set but is not now, locking the user out of
+  the very screen that could replace it. `newPassword` runs the shared
+  `StrongPasswordConstraint`.
+- **The constraint moved to its own file**
+  ([auth/dto/strong-password.ts](backend/src/auth/dto/strong-password.ts)) once
+  `ChangePasswordDto` became its second caller. It was private to `register-dto.ts`; a copy in
+  the second DTO is exactly the drift the shared `passwordProblem` exists to prevent.
+- ⚠️ **A password change revokes the account's other sessions** via
+  `revokeAllForUser(userId, { exceptSessionId })`. That is the point, not a bonus: the usual
+  reason to change a password is believing someone else has it. `exceptSessionId` is
+  `user.sessionId` from the token's `sid` — taking it from a body field or header would let a
+  caller nominate which session survives their own password change. ⚠️ **The revocation runs
+  after the hash is written**; in the other order a failed write signs the account's devices out
+  for a change that never happened.
+- ⚠️ **`changePassword` is its own endpoint, not a field on `PATCH me`** — see the note on
+  `ChangePasswordInput` in contracts. Folding them together makes one request that *sometimes*
+  signs your other devices out, invisible in the type.
+- The duplicate email is **caught, not pre-checked**, in `UsersService.updateProfile` — the same
+  unique index and the same `23505 → EMAIL_TAKEN` translation `register` uses, for the same
+  race.
+- The password check does **not** get `login`'s dummy-hash timing flattening. The caller is
+  already authenticated and asking about their own password; there is no "does this account
+  exist" left to leak.
+- **There is no email verification**, deliberately, and the UI draws no affordance implying
+  otherwise. The new address takes effect on save. That is the obvious next thing to build here
+  and the seam is a column plus a token table.
+
 ### Sessions and refresh tokens
 
 **A session is a device; a refresh token is one rotation step.** `SessionEntity` is one login
@@ -234,6 +279,63 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
   - The card takes `glass`, not `glass-tint`: the canvas wash passes behind it and nothing
     `position: fixed` lives inside it, which is the pair of conditions *Theming* sets for
     spending a backdrop blur.
+- **The header carries no account chrome of its own — it carries one menu.**
+  [UserMenu.tsx](frontend/src/features/auth/UserMenu.tsx) holds the identity block, the two
+  `/profile` links, the theme and Sign out; [AppHeader](frontend/src/features/auth/AppHeader.tsx)
+  keeps only what is *about the workspace you are looking at* (the switcher and the environment
+  picker). The nav pair (Workspace/Sessions) is gone: the workspace is home, and Sessions is a
+  sub-page of Profile.
+  - ⚠️ **`UserMenu` is hand-written and must not become `@radix-ui/react-dropdown-menu`.** That
+    would be a *fourth* Radix package, and the rule above is explicit that nothing is added on
+    the strength of "we already have Radix". What it would buy — focus trap, Escape,
+    outside-press, roving arrow keys — is the ~60 lines already there, for one menu mounted
+    once. (`NodeMenu` is hand-written for a *different* reason — thousands of instances — so
+    this is not a second copy of that argument, but it lands in the same place.)
+  - ⚠️ Its panel is **`absolute`, not `fixed`** — the opposite of `NodeMenu`'s. The header is not
+    a scroll container, so there is no clip to escape, and `absolute` moves with the header for
+    free. The header's `glass` does not interfere: a `backdrop-filter` makes an element a
+    containing block for `fixed` descendants, not for absolute ones.
+  - ⚠️ **Focus returns to the trigger on every close**, Escape and outside-click included — not
+    only on selecting an item. The same failure `Dialog` and `NodeMenu` each handle in their own
+    way, and the same symptom: a keyboard user dropped on `<body>`.
+  - ⚠️ **The theme is a list of `menuitemradio`s, not a nested `Select`.** A popover inside a
+    popover is two focus contexts fighting over Escape, and Escape closes the wrong one.
+    `ThemeMenu` still exists and is still the control on the auth pages, where there is no menu
+    to put it in.
+  - ⚠️ The `resize` listener is a **named** handler. `removeEventListener` compares by identity,
+    so an inline arrow is added on every open and never removed.
+- **`/profile` and `/profile/sessions`**, under `AppShell`, with
+  [ProfileLayout](frontend/src/features/profile/ProfileLayout.tsx) owning the `h1` and the
+  sub-nav. ⚠️ The sub-nav is `NavLink`s, not local tab state: these are two **locations**, so
+  Back must return from Sessions to Account. That is the opposite of `RequestEditor`'s
+  Params/Body call, and for the opposite reason. `SessionsPage`'s own heading dropped to an
+  `h2` — two `h1`s make the outline lie.
+  - ⚠️ **`/sessions` is kept as a redirect, not deleted.** It is the one route a user is likely
+    to have bookmarked, and the `*` catch-all would otherwise land them on the workspace with no
+    hint that their link moved.
+  - ⚠️ **Three forms on `/profile`, not one.** Two endpoints, two different consequences, and
+    only one of them re-authenticates; a single Save would either demand a password to rename
+    yourself or skip the check that matters, and its success message could not say which of the
+    three things happened. The email card renders its password field **only while the address is
+    actually changing**.
+  - Each card seeds from `selectCurrentUser` and reseeds on the **value**, never the object —
+    `useEffect(..., [current])`. The selector hands back a new reference on every refetch, and
+    reseeding on that wipes what the user is typing: the trap `useRequestDraft` already records.
+  - `passwordProblem` is imported from contracts here too, for the same reason `RegisterPage`
+    imports it — the form cannot drift from the DTO.
+  - `updateProfile` feeds `authSlice` through `onQueryStarted` **and** invalidates `Me`. Not
+    redundant: the slice is the synchronous copy the header renders, the tag is the cache. A
+    rename that only invalidated would leave the old name in the header until something
+    refetched, which reads as a save that silently failed.
+  - ⚠️ `changePassword` invalidates `Session` (the list next door is showing devices that were
+    just signed out) and deliberately does **not** touch `authSlice` — the server spares the
+    caller's session, so a `loggedOut()` here would sign the user out of the change they just
+    made.
+- **The form primitives moved to [Field.tsx](frontend/src/components/ui/Field.tsx)** — `Field`,
+  `SubmitButton`, `FormError` — when `/profile` became the third screen to need them, which was
+  the stated condition for promoting them out of `features/auth`. `AuthCard` stayed behind: it
+  is the auth card and nothing else. They are not generic form infrastructure; a prop added here
+  to serve one call site is the signal that that call site wanted its own component.
 - Before dispatching `loggedOut()`, `baseQueryWithReauth` checks the access token is still the one the
   request failed under. A refresh that resolves after a login completed is stale and must not wipe the
   new session. Don't "simplify" that check away.
@@ -904,9 +1006,19 @@ another theme one CSS block instead of a thirty-file audit.
 ## Current state
 
 Auth is complete on both sides: login, refresh with rotation and reuse detection, logout,
-logout-all, `GET /auth/me`, `GET /sessions` and `DELETE /sessions/:id` all exist, and the
-frontend described below is wired to them. `backend/test/auth.e2e-spec.ts` and
-`session-cap.e2e-spec.ts` cover the cycle end to end against a live Postgres.
+logout-all, `GET /auth/me`, `PATCH /auth/me`, `POST /auth/change-password`, `GET /sessions` and
+`DELETE /sessions/:id` all exist, and the frontend described below is wired to them.
+`backend/test/auth.e2e-spec.ts` and `session-cap.e2e-spec.ts` cover the cycle end to end against
+a live Postgres.
+
+**The account screen is complete on both sides.** `/profile` edits name, email and password;
+`/profile/sessions` is the old `/sessions`, moved under it, with a redirect left on the old
+path. See *Profile edits* for the backend rules and *Frontend auth rules* for the client. The
+two service methods are unit-tested in `auth.service.spec.ts` (the rename/email asymmetry, the
+`EMAIL_TAKEN` mapping, the hash-before-revoke ordering, and the caller's own session surviving);
+⚠️ **there is no e2e suite for them yet** — the paths were verified by hand against the running
+stack, which is not the same thing. `register.e2e-spec.ts` is the suite to model one on, and its
+`e2e-register-` email-prefix cleanup is the pattern to copy.
 
 **The `tasks` module is gone.** It was the preliminary CRUD feature that proved out the global
 guard, the DTO/contract seam and the error envelope, and the domain slice replaced it entirely.

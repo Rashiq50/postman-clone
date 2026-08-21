@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Req,
   Res,
@@ -26,6 +27,8 @@ import {
   setRefreshCookie,
 } from './refresh-cookie';
 import { RegisterDto } from './dto/register-dto';
+import { ChangePasswordDto } from './dto/change-password-dto';
+import { UpdateProfileDto } from './dto/update-profile-dto';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiThrottlerGuard } from '../common/throttling/api-throttler.guard';
 import { SKIP_SEND_THROTTLERS } from '../common/throttling/throttler.config';
@@ -202,5 +205,55 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<AuthUserResponseDto> {
     return AuthUserResponseDto.from(await this.authService.me(user.userId));
+  }
+
+  /**
+   * The profile edit behind `/profile`.
+   *
+   * ⚠️ The user id comes from `@CurrentUser()` and nowhere else — no route
+   * param, no body field. There is deliberately no `PATCH /users/:id`: an id in
+   * the path is an authorization question this endpoint does not have to answer
+   * because it cannot be asked. The same rule every domain handler follows.
+   *
+   * `PATCH`, and the DTO's fields are all optional, so a client sends only what
+   * changed. Re-authentication for an email change is enforced in the service,
+   * not here — it depends on the *stored* value, which a controller has not
+   * read.
+   */
+  @Patch('me')
+  async updateMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<AuthUserResponseDto> {
+    return AuthUserResponseDto.from(
+      await this.authService.updateProfile(user.userId, dto),
+    );
+  }
+
+  /**
+   * ⚠️ Its own route rather than a field on `PATCH me`, because it revokes the
+   * account's other sessions — see `ChangePasswordInput` in contracts.
+   *
+   * ⚠️ It passes `user.sessionId`, which is what keeps the caller's own device
+   * signed in. The guard puts it there from the access token's `sid`; taking it
+   * from anywhere else (a body field, a header) would let a caller nominate
+   * which session survives their own password change.
+   *
+   * 204: the answer is that it happened. Returning the user would imply
+   * something about them changed that a client should re-render, and nothing
+   * visible did.
+   */
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<void> {
+    await this.authService.changePassword(
+      user.userId,
+      user.sessionId,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 }

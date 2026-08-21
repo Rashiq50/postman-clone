@@ -13,7 +13,7 @@ import { Sidebar } from '../features/tree/Sidebar'
 export function WorkbenchShell() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-canvas">
-      <AppHeader wide />
+      <AppHeader />
       {/*
         ⚠️ `min-h-0` on both the grid and <main> is load-bearing. A grid or
         flex child defaults to `min-height: auto`, which means "at least as tall

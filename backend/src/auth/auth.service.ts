@@ -179,6 +179,115 @@ export class AuthService {
     return user;
   }
 
+  /**
+   * Applies a partial profile edit.
+   *
+   * ⚠️ **An email change is re-authenticated; a name change is not.** The
+   * address on the account is where a password reset would be sent, so
+   * changing it is an account-takeover step and a live access token is not
+   * enough on its own — a borrowed unlocked laptop has one. A rename is not,
+   * and prompting for a password there would teach the user that this dialog
+   * is noise to be clicked through, which is the failure mode that makes the
+   * prompt on the email worthless.
+   *
+   * ⚠️ The password check reuses `verifyPassword` and answers
+   * `UNAUTHENTICATED`, exactly as `login` does. It deliberately does **not**
+   * get `login`'s dummy-hash timing flattening: the caller is already
+   * authenticated and is asking about their *own* password, so there is no
+   * "does this account exist" to leak here — the only thing a timing signal
+   * could reveal is something the caller already knows.
+   */
+  async updateProfile(
+    userId: string,
+    changes: { name?: string; email?: string; currentPassword?: string },
+  ): Promise<UserEntity> {
+    const user = await this.me(userId);
+
+    // `!==`, not truthiness, and compared against the *stored* value: sending
+    // the address back unchanged (which a form that submits every field always
+    // does) must not demand a password.
+    const emailChanging =
+      changes.email !== undefined && changes.email !== user.email;
+
+    if (emailChanging) {
+      await this.assertPassword(user, changes.currentPassword);
+    }
+
+    let updated: UserEntity | null;
+    try {
+      updated = await this.usersService.updateProfile(userId, {
+        name: changes.name,
+        email: changes.email,
+      });
+    } catch (error) {
+      // Same unique index, same translation as `register`. Pre-checking would
+      // race; see `UsersService.updateProfile`.
+      if (isUniqueViolation(error)) {
+        throw new ApiException(HttpStatus.CONFLICT, {
+          code: ApiErrorCode.EMAIL_TAKEN,
+          message: 'Email is already registered',
+        });
+      }
+      throw error;
+    }
+
+    // `me` above already proved the row exists; a null here means it was
+    // deleted between the two reads, which is the same 401 `me` would give.
+    if (!updated) {
+      throw new UnauthorizedException('Invalid access token');
+    }
+    return updated;
+  }
+
+  /**
+   * Replaces the password and **revokes every other session**.
+   *
+   * ⚠️ The revocation is the point, not a bonus: the most common reason to
+   * change a password is believing someone else has it, and a change that left
+   * their session live would do nothing about the thing the user was worried
+   * about. `currentSessionId` is exempted so the user is not signed out of the
+   * tab they just used — being logged out by your own password change reads as
+   * a failure, and invites a retry with credentials that have already changed.
+   *
+   * ⚠️ **The revocation runs after the hash is written, never before.** In the
+   * other order a failed write would have signed the account's devices out for
+   * a password change that did not happen.
+   */
+  async changePassword(
+    userId: string,
+    currentSessionId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.me(userId);
+    await this.assertPassword(user, currentPassword);
+
+    await this.usersService.updatePasswordHash(
+      userId,
+      await hashPassword(newPassword),
+    );
+
+    await this.sessionsService.revokeAllForUser(userId, {
+      exceptSessionId: currentSessionId,
+    });
+  }
+
+  /** Shared by the two re-authenticating edits above. */
+  private async assertPassword(
+    user: UserEntity,
+    presented: string | undefined,
+  ): Promise<void> {
+    if (
+      presented === undefined ||
+      !(await verifyPassword(user.passwordHash, presented))
+    ) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, {
+        code: ApiErrorCode.UNAUTHENTICATED,
+        message: 'Current password is incorrect',
+      });
+    }
+  }
+
   /** Shared tail of `login` and `refresh` — both answer with the same shape. */
   private issue(
     user: UserEntity,

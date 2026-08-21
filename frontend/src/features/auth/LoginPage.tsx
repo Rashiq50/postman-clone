@@ -3,7 +3,8 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { baseApi } from '../../app/baseApi'
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import { errorMessage, fieldErrors, toApiError } from '../../lib/api-error'
-import { AuthCard, AuthField, FormError, SubmitButton } from './AuthField'
+import { Field, FormError, SubmitButton } from '../../components/ui/Field'
+import { AuthCard } from './AuthCard'
 import { AuthLayout } from './AuthLayout'
 import { useLoginMutation } from './authApi'
 import { selectIsAuthenticated } from './authSlice'
@@ -80,7 +81,7 @@ export function LoginPage() {
       }
     >
       <AuthCard onSubmit={handleSubmit}>
-        <AuthField
+        <Field
           id="email"
           label="Email"
           type="email"
@@ -90,7 +91,7 @@ export function LoginPage() {
           error={fields.email}
         />
 
-        <AuthField
+        <Field
           id="password"
           label="Password"
           type="password"

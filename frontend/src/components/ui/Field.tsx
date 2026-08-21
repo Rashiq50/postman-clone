@@ -1,19 +1,14 @@
-import {
-  useState,
-  type FormEvent,
-  type ReactNode,
-  type Ref,
-} from 'react'
-import { EyeIcon, EyeOffIcon, Spinner } from './AuthArt'
+import { useState, type ReactNode, type Ref } from 'react'
+import { EyeIcon, EyeOffIcon, Spinner } from '../../features/auth/AuthArt'
 
 /**
- * The form primitives shared by `/login` and `/register`.
+ * The form primitives shared by `/login`, `/register` and `/profile`.
  *
- * These are deliberately local to `features/auth` rather than promoted into
- * `components/ui`: nothing else in the app renders a labelled column of
- * validated text inputs, and a premature shared component would have to grow a
- * prop for every difference between the two screens. If a third screen ever
- * needs them, that is the moment to move them.
+ * ⚠️ These lived in `features/auth` until `/profile` became the third screen
+ * to render a labelled column of validated text inputs — which was the stated
+ * condition for moving them. They are not generic form infrastructure and
+ * should not grow into it: a prop added here to serve one call site is the
+ * signal that that call site wanted its own component.
  *
  * ⚠️ The password field owns its own reveal state. Hoisting it to the page
  * (as both pages used to) meant `RegisterPage` carried two nearly identical
@@ -51,7 +46,7 @@ interface FieldProps {
   revealLabel?: { show: string; hide: string }
 }
 
-export function AuthField({
+export function Field({
   id,
   label,
   type,
@@ -127,48 +122,31 @@ export function AuthField({
   )
 }
 
-/**
- * The card. `glass` rather than `glass-tint` — this panel has the canvas wash
- * passing behind it and nothing `position: fixed` inside it, which is the pair
- * of conditions the *Theming* rules set for spending a backdrop blur.
- */
-export function AuthCard({
-  onSubmit,
-  children,
-}: {
-  onSubmit: (event: FormEvent) => void
-  children: ReactNode
-}) {
-  return (
-    <form
-      onSubmit={onSubmit}
-      // The browser's native bubble for `type="email"` speaks in a different
-      // voice from the API's field errors, and cannot be styled or read by the
-      // same assistive tech. One error channel, not two.
-      noValidate
-      className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6 shadow-sm glass"
-    >
-      {children}
-    </form>
-  )
-}
-
 export function SubmitButton({
   busy,
   disabled,
   busyLabel,
+  inline = false,
   children,
 }: {
   busy: boolean
   disabled?: boolean
   busyLabel: string
+  /**
+   * Auto-width instead of filling its row. The auth cards want the full-width
+   * bar (one action, one column); `/profile`'s cards each sit beside a saved
+   * message, where a full-width button would push it onto its own line.
+   */
+  inline?: boolean
   children: ReactNode
 }) {
   return (
     <button
       type="submit"
       disabled={busy || disabled}
-      className="mt-1 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-on-accent shadow-sm transition hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:bg-surface-disabled disabled:text-fg-disabled disabled:shadow-none"
+      className={`flex h-10 items-center justify-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-on-accent shadow-sm transition hover:bg-accent-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:bg-surface-disabled disabled:text-fg-disabled disabled:shadow-none ${
+        inline ? 'shrink-0' : 'mt-1 w-full'
+      }`}
     >
       {busy && <Spinner />}
       {busy ? busyLabel : children}

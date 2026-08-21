@@ -9,7 +9,8 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { baseApi } from '../../app/baseApi'
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import { errorMessage, fieldErrors, toApiError } from '../../lib/api-error'
-import { AuthCard, AuthField, FormError, SubmitButton } from './AuthField'
+import { Field, FormError, SubmitButton } from '../../components/ui/Field'
+import { AuthCard } from './AuthCard'
 import { AuthLayout } from './AuthLayout'
 import { useRegisterMutation } from './authApi'
 import { selectIsAuthenticated } from './authSlice'
@@ -181,7 +182,7 @@ const RegisterPage = () => {
       }
     >
       <AuthCard onSubmit={handleSubmit}>
-        <AuthField
+        <Field
           id="name"
           label="Name"
           type="text"
@@ -196,7 +197,7 @@ const RegisterPage = () => {
           }}
         />
 
-        <AuthField
+        <Field
           id="email"
           label="Email"
           type="email"
@@ -225,7 +226,7 @@ const RegisterPage = () => {
           }}
         />
 
-        <AuthField
+        <Field
           id="password"
           label="Password"
           type="password"
@@ -241,7 +242,7 @@ const RegisterPage = () => {
           }}
         />
 
-        <AuthField
+        <Field
           id="confirm-password"
           label="Confirm password"
           type="password"

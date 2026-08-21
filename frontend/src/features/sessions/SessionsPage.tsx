@@ -14,8 +14,10 @@ export function SessionsPage() {
   return (
     <>
       <header className="mb-6 flex items-start justify-between gap-4">
+        {/* ⚠️ `h2`, not `h1`: `ProfileLayout` above owns the page's `h1`, and
+            two of them makes the heading outline lie to a screen reader. */}
         <div>
-          <h1 className="text-2xl font-semibold text-fg">Sessions</h1>
+          <h2 className="text-lg font-semibold text-fg">Active sessions</h2>
           <p className="text-sm text-fg-subtle">
             Devices currently signed in to your account
           </p>

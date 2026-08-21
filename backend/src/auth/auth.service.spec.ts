@@ -24,6 +24,8 @@ describe('AuthService', () => {
     create: jest.Mock;
     findByEmail: jest.Mock;
     findById: jest.Mock;
+    updateProfile: jest.Mock;
+    updatePasswordHash: jest.Mock;
   };
   let sessionsService: {
     create: jest.Mock;
@@ -47,6 +49,12 @@ describe('AuthService', () => {
       create: jest.fn().mockResolvedValue(user),
       findByEmail: jest.fn().mockResolvedValue(user),
       findById: jest.fn().mockResolvedValue(user),
+      updateProfile: jest
+        .fn()
+        .mockImplementation((id: string, changes: Partial<UserEntity>) =>
+          Promise.resolve({ ...user, ...changes }),
+        ),
+      updatePasswordHash: jest.fn().mockResolvedValue(undefined),
     };
     sessionsService = {
       create: jest.fn().mockResolvedValue({
@@ -459,6 +467,137 @@ describe('AuthService', () => {
       await service.logoutAll('user-1');
 
       expect(sessionsService.revokeAllForUser).toHaveBeenCalledWith('user-1');
+    });
+  });
+
+  /**
+   * The two re-authenticating profile edits.
+   *
+   * ⚠️ The asymmetry is the thing under test: an email change demands the
+   * current password, a rename does not, and a change-password revokes the
+   * account's other sessions while sparing the caller's own. All three are
+   * decisions a later refactor could quietly flip without breaking anything
+   * that a hand test would notice.
+   */
+  describe('updateProfile', () => {
+    it('renames without asking for a password', async () => {
+      const result = await service.updateProfile('user-1', { name: 'Renamed' });
+
+      expect(result.name).toBe('Renamed');
+      expect(usersService.updateProfile).toHaveBeenCalledWith('user-1', {
+        name: 'Renamed',
+        email: undefined,
+      });
+    });
+
+    it('rejects an email change with no password', async () => {
+      await expect(
+        service.updateProfile('user-1', { email: 'new@example.com' }),
+      ).rejects.toMatchObject({ status: HttpStatus.UNAUTHORIZED });
+
+      expect(usersService.updateProfile).not.toHaveBeenCalled();
+    });
+
+    it('rejects an email change with the wrong password', async () => {
+      await expect(
+        service.updateProfile('user-1', {
+          email: 'new@example.com',
+          currentPassword: 'not-the-password',
+        }),
+      ).rejects.toMatchObject({ status: HttpStatus.UNAUTHORIZED });
+
+      expect(usersService.updateProfile).not.toHaveBeenCalled();
+    });
+
+    it('accepts an email change with the right password', async () => {
+      const result = await service.updateProfile('user-1', {
+        email: 'new@example.com',
+        currentPassword: PASSWORD,
+      });
+
+      expect(result.email).toBe('new@example.com');
+    });
+
+    /**
+     * ⚠️ A form that submits every field always resends the unchanged address.
+     * Demanding a password for that would make renaming yourself impossible
+     * without one, which is exactly the reflex-training the split is meant to
+     * avoid.
+     */
+    it('does not demand a password when the email is resent unchanged', async () => {
+      await expect(
+        service.updateProfile('user-1', {
+          name: 'Renamed',
+          email: user.email,
+        }),
+      ).resolves.toMatchObject({ name: 'Renamed' });
+    });
+
+    it('maps a duplicate email to EMAIL_TAKEN', async () => {
+      usersService.updateProfile.mockRejectedValue(
+        Object.assign(
+          new QueryFailedError('UPDATE', [], new Error('duplicate key')),
+          { driverError: { code: '23505' } },
+        ),
+      );
+
+      await expect(
+        service.updateProfile('user-1', {
+          email: 'taken@example.com',
+          currentPassword: PASSWORD,
+        }),
+      ).rejects.toMatchObject({
+        status: HttpStatus.CONFLICT,
+        response: { code: ApiErrorCode.EMAIL_TAKEN },
+      });
+    });
+  });
+
+  describe('changePassword', () => {
+    it('rejects the wrong current password and writes nothing', async () => {
+      await expect(
+        service.changePassword('user-1', 'session-1', 'wrong', 'NewPass123!'),
+      ).rejects.toMatchObject({ status: HttpStatus.UNAUTHORIZED });
+
+      expect(usersService.updatePasswordHash).not.toHaveBeenCalled();
+      expect(sessionsService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('stores a hash, never the plaintext', async () => {
+      await service.changePassword('user-1', 'session-1', PASSWORD, 'NewPass123!');
+
+      const [, stored] = usersService.updatePasswordHash.mock.calls[0] as [
+        string,
+        string,
+      ];
+      expect(stored).not.toBe('NewPass123!');
+      expect(stored.startsWith('$argon2')).toBe(true);
+    });
+
+    /**
+     * ⚠️ The revocation is the whole point — someone changing their password
+     * usually believes another device has it — and sparing the caller's own
+     * session is what stops the change signing the user out of the tab they
+     * made it in.
+     */
+    it('revokes every other session but the caller\'s own', async () => {
+      await service.changePassword('user-1', 'session-1', PASSWORD, 'NewPass123!');
+
+      expect(sessionsService.revokeAllForUser).toHaveBeenCalledWith('user-1', {
+        exceptSessionId: 'session-1',
+      });
+    });
+
+    // ⚠️ In the other order a failed write signs the account's devices out for
+    // a password change that never happened.
+    it('does not revoke anything when the write fails', async () => {
+      usersService.updatePasswordHash.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.changePassword('user-1', 'session-1', PASSWORD, 'NewPass123!'),
+      ).rejects.toThrow('db down');
+
+      expect(sessionsService.revokeAllForUser).not.toHaveBeenCalled();
     });
   });
 

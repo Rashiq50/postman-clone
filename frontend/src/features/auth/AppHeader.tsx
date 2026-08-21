@@ -1,65 +1,71 @@
 import { NavLink } from 'react-router'
-import { BrandMark } from './AuthArt'
-import { useAppSelector } from '../../app/hooks'
 import { EnvironmentPicker } from '../environments/EnvironmentPicker'
-import { ThemeMenu } from '../theme/ThemeMenu'
+import { ThemeButton } from '../theme/ThemeButton'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
-import { useLogoutMutation, useMeQuery } from './authApi'
+import { BrandMark } from './AuthArt'
+import { UserMenu } from './UserMenu'
+import { useMeQuery } from './authApi'
+import { useAppSelector } from '../../app/hooks'
 import { selectCurrentUser } from './authSlice'
 
-const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-md px-3 py-1.5 text-sm font-medium transition ${
-    isActive
-      ? 'bg-accent-soft text-accent-soft-fg'
-      : 'text-fg-muted hover:bg-surface-muted'
-  }`
-
 /**
- * `wide` swaps the centred `max-w-3xl` column for a full-width row. One prop
- * rather than a duplicated header: `AppShell` keeps the centred layout and
- * `WorkbenchShell` needs the sidebar to start at the left edge.
+ * The app chrome.
+ *
+ * ⚠️ **Everything about the account is behind one control now** — the
+ * [UserMenu](UserMenu.tsx). The header used to carry a nav pair
+ * (Workspace/Sessions), a workspace switcher, an environment picker, a theme
+ * `Select`, the user's name and a Sign out button, all competing for one row;
+ * at the workbench's width that left nothing but the brand before the controls
+ * began. What is left here is what is *about the workspace you are looking at*
+ * — the switcher and the environment — while who you are, where your account
+ * settings live and how the app is themed moved into the menu.
+ *
+ * ⚠️ **The Sessions nav link is gone and that is deliberate**: `/sessions` is
+ * now `/profile/sessions`, a sub-page of Profile rather than a peer of the
+ * workspace, and the router keeps a redirect for the old path.
+ *
+ * ⚠️ **The header row is always full width, and the `wide` prop is gone.** It
+ * used to inherit `AppShell`'s centred `max-w-3xl` column, so navigating from
+ * the workbench to `/profile` visibly narrowed the chrome and slid the brand,
+ * the pickers and the account menu inward — the app's frame appearing to resize
+ * around a page change. The frame is the frame; only `<main>` centres its
+ * content. Anything reintroducing that prop brings the jump back.
  */
-export function AppHeader({ wide = false }: { wide?: boolean }) {
+export function AppHeader() {
   const user = useAppSelector(selectCurrentUser)
-  const [logout, { isLoading }] = useLogoutMutation()
 
   // Self-healing fallback: login and refresh both carry the user, so this only
-  // fires if the slice somehow holds a token without one.
+  // fires if the slice somehow holds a token without one. The menu renders the
+  // name and email, so an empty slice is visible here in a way it was not when
+  // the header showed the name alone.
   useMeQuery(undefined, { skip: Boolean(user) })
 
   return (
-    // `glass` rather than `glass-tint`: the header's dropdowns portal to
-    // `body`, so nothing inside it is positioned against it, and the wash it
-    // sits over is exactly the part of the canvas a blur has something to do
-    // with — the corner where the gradients are steepest.
+    // `glass` rather than `glass-tint`: the workspace and environment pickers
+    // portal to `body`, and the user menu is `absolute` rather than `fixed`, so
+    // nothing here depends on the header not being a containing block. The wash
+    // it sits over is the corner where the gradients are steepest, which is
+    // exactly where a blur has something to do.
     <header className="border-b border-line bg-surface glass">
-      <div
-        className={`flex items-center gap-2 py-3 ${
-          wide ? 'w-full px-4' : 'mx-auto max-w-3xl px-4'
-        }`}
-      >
+      <div className="flex w-full items-center gap-2 px-4 py-2.5">
         {/* The mark is a link home, which is what a logo in a header is for.
-            `hidden sm:flex` — on a phone the nav needs the width more than the
-            brand does, and the title bar already carries the name. */}
+            The name hides below `sm` — on a phone the pickers need the width
+            more than the wordmark does, but the mark itself stays, so the way
+            home never disappears. */}
         <NavLink
           to="/"
           aria-label="Raven — workspace"
-          className="mr-1 hidden items-center gap-2 rounded-md px-1 py-1 text-accent transition hover:bg-surface-muted sm:flex"
+          className="mr-1 flex items-center gap-2 rounded-md px-1 py-1 text-accent transition hover:bg-surface-muted"
         >
           <BrandMark className="size-6" />
-          <span className="text-sm font-semibold tracking-tight text-fg">
+          <span className="hidden text-sm font-semibold tracking-tight text-fg sm:inline">
             Raven
           </span>
         </NavLink>
 
-        <nav className="flex flex-1 items-center gap-1">
-          <NavLink to="/" end className={linkClass}>
-            Workspace
-          </NavLink>
-          <NavLink to="/sessions" className={linkClass}>
-            Sessions
-          </NavLink>
-        </nav>
+        {/* The spacer, not a `<nav>`. There are no top-level nav links left:
+            the workspace *is* home, and everything else is in the menu. */}
+        <div className="flex-1" />
 
         <WorkspaceSwitcher />
 
@@ -67,24 +73,13 @@ export function AppHeader({ wide = false }: { wide?: boolean }) {
             (member, workspace). */}
         <EnvironmentPicker />
 
-        <ThemeMenu />
+        {/* ⚠️ Its own control rather than an item inside the account menu: the
+            theme is per browser, not per account, so it is not an account
+            setting — and it is changed far more often than anything under a
+            user's own name should be buried. */}
+        <ThemeButton />
 
-        {user && (
-          <span className="hidden text-sm text-fg-subtle sm:inline">
-            {user.name}
-          </span>
-        )}
-
-        {/* No navigate() needed: `loggedOut` flips `isAuthenticated`, and
-            RequireAuth redirects on the next render. */}
-        <button
-          type="button"
-          onClick={() => void logout()}
-          disabled={isLoading}
-          className="rounded-md px-2 py-1.5 text-sm font-medium text-fg-muted transition hover:bg-surface-muted disabled:opacity-50"
-        >
-          {isLoading ? 'Signing out…' : 'Sign out'}
-        </button>
+        <UserMenu />
       </div>
     </header>
   )
