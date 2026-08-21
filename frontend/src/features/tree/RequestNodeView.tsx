@@ -1,4 +1,4 @@
-import type { RequestNode } from '@postman-clone/contracts'
+import type { RequestNode } from '@raven/contracts'
 import { memo } from 'react'
 import { InlineRename } from './InlineRename'
 import { methodStyles } from './methodStyles'

@@ -5,7 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 // silently running against the real limits — the overrides are load-bearing in
 // opposite directions, so neither can pass with the token unresolved.
 import { THROTTLER_OPTIONS } from '@nestjs/throttler/dist/throttler.constants';
-import { ApiErrorCode } from '@postman-clone/contracts';
+import { ApiErrorCode } from '@raven/contracts';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { App } from 'supertest/types';

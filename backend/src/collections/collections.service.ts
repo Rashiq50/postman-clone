@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type {
   CreateCollectionInput,
   UpdateCollectionInput,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Repository } from 'typeorm';
 import { appendPosition, positionForMove } from '../common/sibling-positions';
 import { explainDenial, explainParentDenial } from '../workspaces/scope-denial';

@@ -1,4 +1,4 @@
-import type { EnvironmentVariable } from '@postman-clone/contracts'
+import type { EnvironmentVariable } from '@raven/contracts'
 
 const BLANK: EnvironmentVariable = {
   key: '',

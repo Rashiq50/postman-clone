@@ -1,4 +1,4 @@
-import type { RequestScripts } from '@postman-clone/contracts'
+import type { RequestScripts } from '@raven/contracts'
 
 /**
  * The pre-request and post-response script slots: two plain `<textarea>`s.

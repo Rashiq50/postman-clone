@@ -11,7 +11,7 @@ import {
   type ApiError,
   ApiErrorCode,
   type ApiErrorDetail,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import type { Request, Response } from 'express';
 
 /** Default code for a status that nothing more specific claimed. */
@@ -33,7 +33,7 @@ interface StructuredPayload {
 /**
  * The single exit for every failure. Catches everything — Nest exceptions,
  * our ApiException, and anything unexpected — and renders the one error shape
- * declared in @postman-clone/contracts.
+ * declared in @raven/contracts.
  *
  * The important property is the last branch: an unexpected throw becomes a
  * generic INTERNAL message. Stack traces, driver errors and failing SQL are

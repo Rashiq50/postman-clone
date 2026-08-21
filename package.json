@@ -1,5 +1,5 @@
 {
-  "name": "postman-clone",
+  "name": "raven",
   "version": "0.0.0",
   "private": true,
   "description": "Dev-stack runner for the workspace. See ./dev.sh.",

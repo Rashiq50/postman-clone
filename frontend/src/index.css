@@ -92,6 +92,18 @@
   --color-method-patch: var(--method-patch);
   --color-method-delete: var(--method-delete);
   --color-method-other: var(--method-other);
+
+  /*
+   * Syntax highlighting. One family, two consumers: the response pane's
+   * hand-written JSON tokenizer and the CodeMirror body editor, which maps
+   * Lezer's tags onto these same colours. A third consumer -- an XML or
+   * GraphQL mode later -- needs no new token, only a mapping onto these.
+   */
+  --color-syntax-key: var(--syntax-key);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-number: var(--syntax-number);
+  --color-syntax-literal: var(--syntax-literal);
+  --color-syntax-punctuation: var(--syntax-punctuation);
 }
 
 /*
@@ -150,6 +162,15 @@
   --method-patch: #6d28d9;
   --method-delete: #b91c1c;
   --method-other: #64748b;
+
+  /* Syntax. Deliberately the same hue families as the methods above: the two
+     sets sit inches apart in the request editor, and a second unrelated
+     palette there reads as two apps stitched together. */
+  --syntax-key: #1d4ed8;
+  --syntax-string: #047857;
+  --syntax-number: #b45309;
+  --syntax-literal: #6d28d9;
+  --syntax-punctuation: #64748b;
 
   /*
    * Effects, not colours — and the only tokens here that are not one. A blur
@@ -232,6 +253,12 @@
   --method-patch: #a78bfa;
   --method-delete: #f87171;
   --method-other: #93a1b5;
+
+  --syntax-key: #7dd3fc;
+  --syntax-string: #86efac;
+  --syntax-number: #fcd34d;
+  --syntax-literal: #d8b4fe;
+  --syntax-punctuation: #93a1b5;
 }
 
 /*
@@ -287,6 +314,12 @@
   --method-patch: #c084fc;
   --method-delete: #fb7185;
   --method-other: #9a9aa6;
+
+  --syntax-key: #67e8f9;
+  --syntax-string: #86efac;
+  --syntax-number: #fde047;
+  --syntax-literal: #d8b4fe;
+  --syntax-punctuation: #9a9aa6;
 }
 
 /*
@@ -371,6 +404,12 @@
   --method-patch: #c084fc;
   --method-delete: #fb7185;
   --method-other: #9ea7bb;
+
+  --syntax-key: #67e8f9;
+  --syntax-string: #86efac;
+  --syntax-number: #fde047;
+  --syntax-literal: #d8b4fe;
+  --syntax-punctuation: #9ea7bb;
 }
 
 /*
@@ -427,6 +466,12 @@
   --method-patch: #6b3fa0;
   --method-delete: #a12626;
   --method-other: #7a6c56;
+
+  --syntax-key: #1e4f8a;
+  --syntax-string: #2f6b46;
+  --syntax-number: #a15c07;
+  --syntax-literal: #6b3fa0;
+  --syntax-punctuation: #7a6c56;
 }
 
 /*
@@ -477,6 +522,31 @@
 @utility glass-scrim {
   -webkit-backdrop-filter: var(--glass-backdrop);
   backdrop-filter: var(--glass-backdrop);
+}
+
+/**
+ * The brand mark's neon glow.
+ *
+ * ⚠️ **It spends `currentColor`, never a hex**, so the halo is always the same
+ * hue as the mark it surrounds and re-themes with `text-accent` like every
+ * other colour in the app. It introduces no token and therefore no `PAIRS`
+ * entry — a `drop-shadow` paints outside the glyph and is not a foreground on
+ * a background, so there is nothing for `check-contrast.mjs` to measure.
+ *
+ * ⚠️ **Dark appearances only.** A glow needs something to sit on: over the
+ * light themes' near-white canvas it reads as a smudge around the outline
+ * rather than as light. `data-appearance` is already on `<html>` for exactly
+ * this kind of question (the pre-paint script in `index.html` sets it), so
+ * this needs no JavaScript and no new state.
+ */
+@utility neon-mark {
+  filter: none;
+}
+
+@layer base {
+  :root[data-appearance='dark'] .neon-mark {
+    filter: drop-shadow(0 0 3px currentColor);
+  }
 }
 
 @layer base {

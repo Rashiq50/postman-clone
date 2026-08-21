@@ -12,7 +12,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { API_VERSION, type Paginated } from '@postman-clone/contracts';
+import { API_VERSION, type Paginated } from '@raven/contracts';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';

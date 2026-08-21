@@ -10,7 +10,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { API_VERSION, type Paginated } from '@postman-clone/contracts';
+import { API_VERSION, type Paginated } from '@raven/contracts';
 import type { Response } from 'express';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CurrentUser } from '../auth/current-user.decorator';

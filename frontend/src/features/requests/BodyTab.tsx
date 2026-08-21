@@ -2,8 +2,9 @@ import {
   REQUEST_BODY_MODES,
   type RequestBody,
   type RequestBodyMode,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { useState } from 'react'
+import { CodeEditor } from '../../components/ui/CodeEditor'
 import { Select } from '../../components/ui/Select'
 import { KeyValueEditor } from './KeyValueEditor'
 
@@ -22,13 +23,18 @@ function emptyBody(mode: RequestBodyMode): RequestBody {
 }
 
 /**
- * A mode dropdown and a plain `<textarea>`.
+ * A mode dropdown and a code editor.
  *
- * No editor library. Adding one is a dependency, a bundle-size and a theming
- * decision that belongs with the execution slice, where syntax highlighting of
- * a *response* actually starts to earn it. The Format JSON button below is ten
- * lines and does most of what people actually miss, which is what keeps the
- * plain textarea feeling deliberate rather than unfinished.
+ * ⚠️ **This is the one place in the app that uses CodeMirror, and the reasoning
+ * for it lives in [CodeEditor.tsx](../../components/ui/CodeEditor.tsx).** The
+ * short version: the *response* pane needed colour only, and got a ~120-line
+ * tokenizer with no dependency ([jsonSyntax.ts](jsonSyntax.ts)); a body is
+ * typed into, and keeping a highlight layer in register with a caret, a
+ * selection, wrapping and IME composition is the part that is not worth
+ * hand-writing. Both halves paint through the same `--syntax-*` tokens.
+ *
+ * Format JSON stays. It is ten lines, it is what people actually reach for,
+ * and it is the reason the editor needs no formatter extension.
  */
 export function BodyTab({
   body,
@@ -40,11 +46,12 @@ export function BodyTab({
   /**
    * Forwarded to the form-urlencoded grid, whose cells resolve `{{variables}}`.
    *
-   * ⚠️ The raw/JSON `<textarea>` below is deliberately **not** a
-   * `VariableInput`. A multi-line variant is a different problem — wrapping,
-   * vertical scroll sync, and a paste that must *not* collapse newlines — and
-   * it is not built. Variables still interpolate into the body when sent; they
-   * are simply not highlighted here yet.
+   * ⚠️ The editor below is deliberately **not** a `VariableInput`, and
+   * CodeMirror does not change that. Resolving `{{variables}}` there means a
+   * `ViewPlugin` with its own decoration set and a hover tooltip — a feature,
+   * not a styling detail, and one that would need the environment data this
+   * component does not receive. Variables still interpolate into the body when
+   * it is sent; they are simply not marked up here.
    */
   workspaceId: string | undefined
 }) {
@@ -93,14 +100,28 @@ export function BodyTab({
       )}
 
       {(body.mode === 'raw' || body.mode === 'json') && (
-        <textarea
-          value={body.text}
-          aria-label="Request body"
-          spellCheck={false}
-          rows={14}
-          onChange={(e) => onChange({ mode: body.mode, text: e.target.value })}
-          className="w-full rounded-md border border-line-strong p-3 font-mono text-sm outline-none focus:border-accent"
-        />
+        /*
+         * ⚠️ The border and the focus ring live on this wrapper, not inside the
+         * editor. CodeMirror renders its own focusable `contenteditable`, so a
+         * `focus:` utility would never match — `focus-within` is what makes the
+         * control read as focused, and it is what keeps this looking like the
+         * app's other inputs rather than like an embedded IDE.
+         *
+         * The height is fixed and `overflow-hidden` clips to the radius: the
+         * editor scrolls internally, so a body of any length leaves the tab
+         * card the same size and the Send button where the user left it.
+         */
+        <div className="h-64 overflow-hidden rounded-md border border-line-strong transition-colors focus-within:border-accent">
+          <CodeEditor
+            value={body.text}
+            language={body.mode === 'json' ? 'json' : 'text'}
+            ariaLabel="Request body"
+            placeholderText={
+              body.mode === 'json' ? '{ "key": "value" }' : 'Request body'
+            }
+            onChange={(text) => onChange({ mode: body.mode, text })}
+          />
+        </div>
       )}
 
       {body.mode === 'form-urlencoded' && (

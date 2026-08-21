@@ -144,6 +144,25 @@ const PAIRS = [
   ['method-delete on surface', '--method-delete', '--surface', 4.5],
   ['method-other on surface', '--method-other', '--surface', 4.5],
   ['fg-disabled on surface-disabled', '--fg-disabled', '--surface-disabled', 3.0],
+  // Syntax highlighting, checked against **both** backgrounds it lands on:
+  // the response pane's `<pre>` sits straight on the canvas, while the
+  // CodeMirror body editor sits inside the request editor's `bg-surface`
+  // card. Checking one would leave the other unaudited, and on the light
+  // themes the two grounds are close enough that it would look fine anyway.
+  ['syntax-key on canvas', '--syntax-key', '--canvas', 4.5],
+  ['syntax-key on surface', '--syntax-key', '--surface', 4.5],
+  ['syntax-string on canvas', '--syntax-string', '--canvas', 4.5],
+  ['syntax-string on surface', '--syntax-string', '--surface', 4.5],
+  ['syntax-number on canvas', '--syntax-number', '--canvas', 4.5],
+  ['syntax-number on surface', '--syntax-number', '--surface', 4.5],
+  ['syntax-literal on canvas', '--syntax-literal', '--canvas', 4.5],
+  ['syntax-literal on surface', '--syntax-literal', '--surface', 4.5],
+  // Braces, brackets, commas and colons. 3.0 for the same reason as
+  // `fg-faint`: it is structure, not prose -- nobody reads a comma, and
+  // pushing it to 4.5 makes it compete with the values it separates. Not
+  // zero, though; punctuation that vanishes turns JSON into a word list.
+  ['syntax-punctuation on canvas', '--syntax-punctuation', '--canvas', 3.0],
+  ['syntax-punctuation on surface', '--syntax-punctuation', '--surface', 3.0],
 ]
 
 const themes = readThemes(readFileSync(CSS_PATH, 'utf8'))

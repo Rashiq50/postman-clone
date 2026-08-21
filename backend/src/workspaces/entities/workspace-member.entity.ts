@@ -1,4 +1,4 @@
-import { WorkspaceRole } from '@postman-clone/contracts';
+import { WorkspaceRole } from '@raven/contracts';
 import {
   Check,
   Column,

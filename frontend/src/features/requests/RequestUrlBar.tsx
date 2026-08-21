@@ -1,4 +1,4 @@
-import { HTTP_METHODS, type HttpMethod } from '@postman-clone/contracts'
+import { HTTP_METHODS, type HttpMethod } from '@raven/contracts'
 import { Select } from '../../components/ui/Select'
 import { VariableInput } from '../../components/ui/VariableInput'
 import { methodStyles } from '../tree/methodStyles'

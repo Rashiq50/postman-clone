@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router'
+import { BrandMark } from './AuthArt'
 import { useAppSelector } from '../../app/hooks'
 import { EnvironmentPicker } from '../environments/EnvironmentPicker'
 import { ThemeMenu } from '../theme/ThemeMenu'
@@ -37,6 +38,20 @@ export function AppHeader({ wide = false }: { wide?: boolean }) {
           wide ? 'w-full px-4' : 'mx-auto max-w-3xl px-4'
         }`}
       >
+        {/* The mark is a link home, which is what a logo in a header is for.
+            `hidden sm:flex` — on a phone the nav needs the width more than the
+            brand does, and the title bar already carries the name. */}
+        <NavLink
+          to="/"
+          aria-label="Raven — workspace"
+          className="mr-1 hidden items-center gap-2 rounded-md px-1 py-1 text-accent transition hover:bg-surface-muted sm:flex"
+        >
+          <BrandMark className="size-6" />
+          <span className="text-sm font-semibold tracking-tight text-fg">
+            Raven
+          </span>
+        </NavLink>
+
         <nav className="flex flex-1 items-center gap-1">
           <NavLink to="/" end className={linkClass}>
             Workspace

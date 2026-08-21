@@ -2,7 +2,7 @@ import {
   buildVariables,
   type Environment,
   type ResolvedVariable,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { useMemo } from 'react'
 import { useGetWorkspacesQuery } from '../workspaces/workspacesApi'
 import { useGetEnvironmentsQuery } from './environmentsApi'

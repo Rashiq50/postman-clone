@@ -16,7 +16,7 @@
  * requirement demands instant cross-tab logout.
  */
 
-import type { AuthUser } from '@postman-clone/contracts'
+import type { AuthUser } from '@raven/contracts'
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from '../../app/store'
 

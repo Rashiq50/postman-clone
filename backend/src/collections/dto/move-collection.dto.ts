@@ -1,4 +1,4 @@
-import type { MoveCollectionInput } from '@postman-clone/contracts';
+import type { MoveCollectionInput } from '@raven/contracts';
 import { Type } from 'class-transformer';
 import { IsInt, Min } from 'class-validator';
 

@@ -1,4 +1,4 @@
-import type { SessionSummary } from '@postman-clone/contracts'
+import type { SessionSummary } from '@raven/contracts'
 import { useState } from 'react'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useRevokeSessionMutation } from './sessionsApi'

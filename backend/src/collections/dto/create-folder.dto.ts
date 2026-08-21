@@ -1,7 +1,7 @@
 import {
   COLLECTION_NAME_MAX_LENGTH,
   type CreateFolderInput,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Transform } from 'class-transformer';
 import {
   IsNotEmpty,

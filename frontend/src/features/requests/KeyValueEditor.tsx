@@ -1,4 +1,4 @@
-import type { KeyValueEntry } from '@postman-clone/contracts'
+import type { KeyValueEntry } from '@raven/contracts'
 import { VariableInput } from '../../components/ui/VariableInput'
 
 const BLANK: KeyValueEntry = { key: '', value: '', enabled: true }

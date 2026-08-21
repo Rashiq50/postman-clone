@@ -4,7 +4,7 @@ import type {
   CreateEnvironmentInput,
   Paginated,
   UpdateEnvironmentInput,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Repository } from 'typeorm';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { paginated } from '../common/pagination';

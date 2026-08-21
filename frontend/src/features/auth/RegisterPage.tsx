@@ -3,7 +3,7 @@ import {
   NAME_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
   passwordProblem,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { baseApi } from '../../app/baseApi'

@@ -6,7 +6,7 @@ import {
   type RequestAuth,
   type RequestBody,
   type RequestScripts,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Transform } from 'class-transformer';
 import {
   IsEnum,

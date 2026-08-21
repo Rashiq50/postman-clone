@@ -1,4 +1,4 @@
-import type { WorkspaceTree } from '@postman-clone/contracts'
+import type { WorkspaceTree } from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 import type { AppDispatch } from '../../app/store'
 import { treeApi, treeTag } from './treeApi'

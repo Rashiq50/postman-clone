@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { THROTTLER_OPTIONS } from '@nestjs/throttler/dist/throttler.constants';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ApiErrorCode } from '@postman-clone/contracts';
+import { ApiErrorCode } from '@raven/contracts';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { App } from 'supertest/types';

@@ -1,4 +1,4 @@
-import type { Folder } from '@postman-clone/contracts';
+import type { Folder } from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { FolderEntity } from '../entities/folder.entity';
 

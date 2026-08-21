@@ -3,7 +3,7 @@ import type {
   AuthUser,
   LoginInput,
   RegisterInput,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 import { credentialsReceived, loggedOut, userLoaded } from './authSlice'
 

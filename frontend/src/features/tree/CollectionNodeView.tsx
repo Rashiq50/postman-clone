@@ -1,4 +1,4 @@
-import type { CollectionNode } from '@postman-clone/contracts'
+import type { CollectionNode } from '@raven/contracts'
 import { memo } from 'react'
 import { FolderNodeView } from './FolderNodeView'
 import { InlineRename } from './InlineRename'

@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { THROTTLER_OPTIONS } from '@nestjs/throttler/dist/throttler.constants';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ApiErrorCode, type WorkspaceTree } from '@postman-clone/contracts';
+import { ApiErrorCode, type WorkspaceTree } from '@raven/contracts';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';

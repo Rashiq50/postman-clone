@@ -7,7 +7,7 @@ import type {
   SendRequestInput,
   SendResult,
   SendWarning,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Repository } from 'typeorm';
 import { explainDenial } from '../workspaces/scope-denial';
 import {

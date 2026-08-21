@@ -2,7 +2,7 @@ import type {
   Environment,
   EnvironmentVariable,
   ResolvedVariable,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { useState } from 'react'
 import { useUpdateEnvironmentMutation } from '../../../features/environments/environmentsApi'
 import { usePanelAnchor } from './usePanelAnchor'

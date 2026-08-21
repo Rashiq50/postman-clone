@@ -2,7 +2,7 @@ import {
   API_PREFIX,
   API_VERSION,
   type AuthResponse,
-} from "@postman-clone/contracts";
+} from "@raven/contracts";
 import {
   createApi,
   fetchBaseQuery,

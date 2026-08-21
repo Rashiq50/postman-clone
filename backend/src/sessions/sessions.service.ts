@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { Paginated } from '@postman-clone/contracts';
+import type { Paginated } from '@raven/contracts';
 import crypto from 'node:crypto';
 import { EntityManager, IsNull, MoreThan, Repository } from 'typeorm';
 import { sha256 } from '../common/crypto/sha256';

@@ -110,7 +110,7 @@ export function AuthLayout({
         <div className="flex items-center gap-2.5 text-accent">
           <BrandMark />
           <span className="text-base font-semibold tracking-tight text-fg">
-            Postman clone
+            Raven
           </span>
         </div>
 
@@ -167,7 +167,7 @@ export function AuthLayout({
           <div className="mb-6 flex items-center gap-2.5 text-accent lg:hidden">
             <BrandMark className="size-8" />
             <span className="text-sm font-semibold tracking-tight text-fg">
-              Postman clone
+              Raven
             </span>
           </div>
 

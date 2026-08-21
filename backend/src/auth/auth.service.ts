@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ApiErrorCode } from '@postman-clone/contracts';
+import { ApiErrorCode } from '@raven/contracts';
 import { randomUUID } from 'node:crypto';
 import { QueryFailedError } from 'typeorm';
 import { hashPassword, verifyPassword } from '../common/crypto/password';

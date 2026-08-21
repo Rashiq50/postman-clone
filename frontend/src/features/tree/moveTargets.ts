@@ -1,4 +1,4 @@
-import type { CollectionNode, FolderNode } from '@postman-clone/contracts'
+import type { CollectionNode, FolderNode } from '@raven/contracts'
 
 export interface MoveTarget {
   id: string | null

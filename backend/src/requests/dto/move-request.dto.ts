@@ -1,4 +1,4 @@
-import type { MoveApiRequestInput } from '@postman-clone/contracts';
+import type { MoveApiRequestInput } from '@raven/contracts';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsUUID, Min, ValidateIf } from 'class-validator';
 

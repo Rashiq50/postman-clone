@@ -3,7 +3,7 @@ import {
   REQUEST_BODY_MODES,
   type RequestAuthType,
   type RequestBodyMode,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import {
   ValidatorConstraint,
   type ValidatorConstraintInterface,

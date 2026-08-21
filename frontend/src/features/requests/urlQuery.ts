@@ -1,4 +1,4 @@
-import type { KeyValueEntry } from '@postman-clone/contracts'
+import type { KeyValueEntry } from '@raven/contracts'
 
 /**
  * Two-way sync between the URL bar's query string and the Params table.

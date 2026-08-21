@@ -13,7 +13,7 @@ import type {
   SendResponse,
   SendTiming,
   SendWarning,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import type { SendOptions } from './send-options';
 import {
   BlockedAddressError,

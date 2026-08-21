@@ -2,7 +2,7 @@ import type {
   Paginated,
   PaginationQuery,
   SessionSummary,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 
 export const sessionsApi = baseApi.injectEndpoints({

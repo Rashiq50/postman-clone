@@ -5,8 +5,8 @@ import type {
   RequestBody,
   SendDraft,
   SendRequestInput,
-} from '@postman-clone/contracts';
-import { HTTP_METHODS } from '@postman-clone/contracts';
+} from '@raven/contracts';
+import { HTTP_METHODS } from '@raven/contracts';
 import { Type } from 'class-transformer';
 import {
   IsIn,

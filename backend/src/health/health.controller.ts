@@ -1,5 +1,5 @@
 import { Controller, Get, HttpCode, HttpStatus, Res } from '@nestjs/common';
-import { API_VERSION } from '@postman-clone/contracts';
+import { API_VERSION } from '@raven/contracts';
 import type { Response } from 'express';
 import { Public } from '../auth/public.decorator';
 import { HealthService } from './health.service';

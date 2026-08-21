@@ -8,7 +8,7 @@ import type {
   SendFailureKind,
   SendTiming,
   SendWarning,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import type { RequestExecutionEntity } from '../entities/request-execution.entity';
 

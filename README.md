@@ -1,12 +1,29 @@
-# Postman Clone
+# Raven
 
-NestJS backend, React frontend, and a shared contracts package. Package manager: **yarn**.
+An API workbench — collections, environments, and a send history. NestJS backend,
+React frontend, and a shared contracts package. Package manager: **yarn**.
+
+> Formerly `postman-clone`. The rename covered the product name, the brand assets and
+> the `@raven/contracts` scope; the `postman_clone` database, the `postman-clone` JWT
+> issuer/audience and the `pc.*` `localStorage` keys were deliberately left alone —
+> each is a stored identifier whose change costs a migration, a forced re-login or a
+> reset preference, and none is user-visible. See *Rebrand leftovers* below.
 
 ```
 backend/            NestJS + TypeORM + PostgreSQL
 frontend/           React + Redux Toolkit + TypeScript + Tailwind CSS (Vite)
 packages/contracts/ Wire format shared by both — one definition, both sides
 ```
+
+## Rebrand leftovers
+
+Three identifiers still spell the old name, each on purpose:
+
+| Identifier | Where | Why it stayed |
+| --- | --- | --- |
+| `postman_clone` | `DB_NAME` in `.env`, `.env.example`, README | Renaming means creating a database and re-running every migration against it. A one-line change to make, and yours to decide. |
+| `postman-clone` / `postman-clone-api` | `JWT_ISSUER` / `JWT_AUDIENCE`, their Joi defaults and the two guard specs | Signing and verify options are pinned in one factory (see CLAUDE.md); changing them invalidates every access token in flight, so it is a deliberate one-time forced logout rather than a side effect of a rename. |
+| `pc.theme`, `pc.theme.appearance`, `pc.tree.expanded.<id>` | `localStorage`, mirrored in `index.html`'s pre-paint script | Renaming a storage key silently discards what it holds: every user's theme resets to System and every sidebar collapses on the next load. The keys are invisible to users and the prefix is not the product name anywhere they can see. |
 
 ## Prerequisites
 

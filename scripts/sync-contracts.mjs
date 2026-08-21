@@ -5,7 +5,7 @@ import { execSync } from 'node:child_process';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pkgDir = join(root, 'packages', 'contracts');
-const pkgName = '@postman-clone/contracts';
+const pkgName = '@raven/contracts';
 const consumers = ['backend', 'frontend'];
 
 if (!existsSync(join(pkgDir, 'node_modules', '.bin', 'tsc'))) {

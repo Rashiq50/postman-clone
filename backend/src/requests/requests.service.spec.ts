@@ -1,7 +1,7 @@
 import { HttpStatus, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ApiErrorCode } from '@postman-clone/contracts';
+import { ApiErrorCode } from '@raven/contracts';
 import { RequestEntity } from './entities/request.entity';
 import { RequestsService } from './requests.service';
 

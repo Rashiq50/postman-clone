@@ -1,4 +1,4 @@
-import type { Collection } from '@postman-clone/contracts';
+import type { Collection } from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { CollectionEntity } from '../entities/collection.entity';
 

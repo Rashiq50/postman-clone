@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceRole } from '@postman-clone/contracts';
+import type { Workspace, WorkspaceRole } from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import type { WorkspaceWithRole } from '../workspaces.service';
 

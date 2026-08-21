@@ -3,7 +3,7 @@ import {
   NAME_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
   passwordProblem,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Transform } from 'class-transformer';
 import {
   IsEmail,

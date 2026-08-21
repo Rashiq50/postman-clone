@@ -1,4 +1,4 @@
-import type { FolderNode } from '@postman-clone/contracts'
+import type { FolderNode } from '@raven/contracts'
 import { memo } from 'react'
 import { InlineRename } from './InlineRename'
 import { NodeMenu } from './NodeMenu'

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
-import { API_PREFIX, API_VERSION } from '@postman-clone/contracts';
+import { API_PREFIX, API_VERSION } from '@raven/contracts';
 import { validationExceptionFactory } from './common/errors/validation-exception.factory';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 

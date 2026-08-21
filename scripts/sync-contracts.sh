@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Build @postman-clone/contracts and install it into each app's node_modules
+# Build @raven/contracts and install it into each app's node_modules
 # as a real directory.
 #
 # Why a copy instead of yarn workspaces / npm link: both of those are
 # symlink-based, and this project lives on a volume where NTFS reparse points
 # fail (`ERROR_FILE_CORRUPT` on every junction/symlink, drive-wide). A copied
 # build is byte-for-byte what a published dependency looks like to Node, tsc
-# and Vite, so imports stay `@postman-clone/contracts` and nothing in the
+# and Vite, so imports stay `@raven/contracts` and nothing in the
 # application code changes if this ever moves to real workspaces.
 #
 # Run this after any `yarn install` — yarn prunes packages it does not know
@@ -17,7 +17,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PKG_DIR="$ROOT/packages/contracts"
-PKG_NAME="@postman-clone/contracts"
+PKG_NAME="@raven/contracts"
 CONSUMERS=(backend frontend)
 
 # Check for the binary, not the directory: a half-populated node_modules from

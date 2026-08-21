@@ -4,10 +4,15 @@ import type {
   ResponseHeader,
   SendTiming,
   SendWarning,
-} from "@postman-clone/contracts";
+} from "@raven/contracts";
 import * as Tabs from "@radix-ui/react-tabs";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { HistoryPane } from "./HistoryPane";
+import {
+  HIGHLIGHT_MAX_CHARS,
+  SYNTAX_CLASS,
+  tokenizeJson,
+} from "./jsonSyntax";
 import { ResponseActions } from "./ResponseActions";
 import { contentTypeOf, downloadResponse, headersAsText } from "./responseFile";
 import {
@@ -16,7 +21,6 @@ import {
   formatDuration,
   statusStyle,
 } from "./statusStyles";
-import { Chevron } from "../tree/NodeRow";
 import { ChevronIcon } from "../tree/NodeIcon";
 
 /**
@@ -45,13 +49,19 @@ const PANE_TABS = ["Body", "Headers", "History"] as const;
 type PaneTab = (typeof PANE_TABS)[number];
 
 /**
- * Pretty-prints JSON, reusing `BodyTab`'s approach.
+ * Pretty-prints JSON.
  *
- * ⚠️ **No editor library and no syntax highlighting**, which is the dependency
- * question `BodyTab` explicitly deferred *to this slice*. The answer is still
- * no: a plain `<pre>` plus a Pretty/Raw toggle covers what a person actually
- * does with a response, and CodeMirror or Monaco is a large, hard-to-reverse
- * dependency to buy indentation with.
+ * ⚠️ It doubles as the pane's **"is this JSON?" test**, which is why its
+ * `null` return is threaded down as `canPretty` rather than being swallowed
+ * here: the Pretty/Raw toggle and the syntax highlighting are gated on exactly
+ * the same answer, and deriving that answer twice is how they would come to
+ * disagree — a body prettified but uncoloured, or the reverse.
+ *
+ * ⚠️ **Still no editor library on this side.** The pane is read-only, so it
+ * needs a tokenizer and not an editor; that is [jsonSyntax.ts](jsonSyntax.ts),
+ * which is ~120 lines and no dependency. CodeMirror is in the app now, for the
+ * request body in `BodyTab` — mounting a second instance here to render text
+ * nobody can type into would buy nothing and cost the pane its `<pre>`.
  */
 function prettify(text: string): string | null {
   try {
@@ -79,6 +89,25 @@ function BodyView({
   pretty: boolean;
   onPrettyChange: (pretty: boolean) => void;
 }) {
+  const text = body.encoding === "text" ? displayed : "";
+  const tooLargeToHighlight = text.length > HIGHLIGHT_MAX_CHARS;
+
+  /**
+   * ⚠️ Above the early returns, and memoized on the displayed text.
+   *
+   * Above, because `empty` and `base64` bodies return before the `<pre>` and a
+   * hook after them would change the hook order between two response bodies —
+   * the classic version of this bug, and one that only fires on the *second*
+   * send. Memoized, because the pane re-renders on every parent state change
+   * (the drag handle alone dispatches on every pointermove), and re-tokenizing
+   * a 100 kB body per frame while someone resizes the split is exactly the
+   * stall the cap exists to prevent.
+   */
+  const tokens = useMemo(
+    () => (canPretty && !tooLargeToHighlight ? tokenizeJson(text) : null),
+    [canPretty, tooLargeToHighlight, text],
+  );
+
   if (body.encoding === "empty") {
     return <p className="p-4 text-sm text-fg-faint">No response body.</p>;
   }
@@ -129,10 +158,33 @@ function BodyView({
               {mode}
             </button>
           ))}
+
+          {/* ⚠️ Said out loud rather than silently degrading. Highlighting that
+              works on one response and not the next, with no explanation, reads
+              as "the pane failed to recognise this as JSON" — which would be a
+              lie about the data instead of a statement about the size. */}
+          {canPretty && tooLargeToHighlight && (
+            <span className="self-center pl-2 text-xs text-fg-faint">
+              Highlighting off — over {Math.round(HIGHLIGHT_MAX_CHARS / 1000)} kB
+            </span>
+          )}
         </div>
       )}
       <pre className="min-h-0 flex-1 overflow-auto p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-fg">
-        {displayed}
+        {/* ⚠️ `plain` tokens are bare strings, not `<span>`s. Indentation is the
+            most common token in a prettified document by a wide margin, so
+            wrapping it would roughly double the node count to colour nothing. */}
+        {tokens
+          ? tokens.map((token, index) =>
+              token.kind === "plain" ? (
+                token.text
+              ) : (
+                <span key={index} className={SYNTAX_CLASS[token.kind]}>
+                  {token.text}
+                </span>
+              ),
+            )
+          : displayed}
       </pre>
     </div>
   );

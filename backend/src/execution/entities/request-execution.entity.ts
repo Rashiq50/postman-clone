@@ -5,7 +5,7 @@ import type {
   SendFailureKind,
   SendTiming,
   SendWarning,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import {
   Check,
   Column,

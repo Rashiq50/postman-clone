@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-label="Raven">
+  <defs>
+    <linearGradient id="raven-neon" x1="4" y1="58" x2="58" y2="8" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7e14ff"/>
+      <stop offset=".55" stop-color="#863bff"/>
+      <stop offset="1" stop-color="#47bfff"/>
+    </linearGradient>
+    <filter id="raven-glow" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/></feMerge>
+    </filter>
+    <g id="raven-strokes" fill="none" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M60.5 19.3C55 15.5 51 13 47 12.5C42 8 34 9 31 15C28 21 27 28 24.5 33.5C19 39 11 47 3 56.5L7.5 59C13.5 52 19.5 45.5 26 41C30 39.5 34 40 38 40C44 38 47 33 46 27C45.5 23.5 47 21.5 49 20.5C52.5 20.2 56.5 20 60.5 19.3Z"/>
+      <path d="M32.5 17C28 23 24 31 19.5 41C27 38 33 32 36.5 25C36.5 21 35 18.5 32.5 17Z"/>
+      <path d="M29 22.5C25.5 28 22.5 34 20 40.5"/>
+      <path d="M37.5 40.5L36 47M41.5 39.5L42.5 46.5M36 47L32.5 48.5M36 47L39.5 48.5M42.5 46.5L39 48M42.5 46.5L46 48"/>
+      <path d="M6 49.5L58 45"/>
+    </g>
+  </defs>
+
+  <use href="#raven-strokes" filter="url(#raven-glow)" stroke="url(#raven-neon)" stroke-width="2.3" opacity=".9"/>
+  <use href="#raven-strokes" stroke="url(#raven-neon)" stroke-width="2.3"/>
+  <use href="#raven-strokes" stroke="#ede6ff" stroke-width=".7" opacity=".5"/>
+  <circle cx="44.5" cy="16.5" r="1.5" fill="#ede6ff"/>
+</svg>

@@ -1,4 +1,4 @@
-import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '@postman-clone/contracts'
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '@raven/contracts'
 import { useState } from 'react'
 import { useLogoutAllMutation } from '../auth/authApi'
 import { errorMessage, toApiError } from '../../lib/api-error'

@@ -1,6 +1,6 @@
 import { HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { JwtModule, JwtService } from '@nestjs/jwt';
-import { ApiErrorCode } from '@postman-clone/contracts';
+import { ApiErrorCode } from '@raven/contracts';
 import { QueryFailedError } from 'typeorm';
 import { ApiException } from '../common/errors/api.exception';
 import { Test, TestingModule } from '@nestjs/testing';

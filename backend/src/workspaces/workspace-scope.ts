@@ -1,4 +1,4 @@
-import { WorkspaceRole } from '@postman-clone/contracts';
+import { WorkspaceRole } from '@raven/contracts';
 
 /**
  * Authorization, as SQL fragments rather than a guard.

@@ -1,4 +1,4 @@
-import { WorkspaceRole } from '@postman-clone/contracts';
+import { WorkspaceRole } from '@raven/contracts';
 import type { EntityManager } from 'typeorm';
 import { WorkspaceMemberEntity } from './entities/workspace-member.entity';
 import { WorkspaceEntity } from './entities/workspace.entity';

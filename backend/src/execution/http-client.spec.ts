@@ -1,7 +1,7 @@
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import * as zlib from 'node:zlib';
-import type { SendResponse } from '@postman-clone/contracts';
+import type { SendResponse } from '@raven/contracts';
 import {
   decodeBody,
   HeaderValidationError,

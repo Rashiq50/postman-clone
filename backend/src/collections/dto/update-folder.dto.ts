@@ -1,5 +1,5 @@
 import { PickType, PartialType } from '@nestjs/mapped-types';
-import type { UpdateFolderInput } from '@postman-clone/contracts';
+import type { UpdateFolderInput } from '@raven/contracts';
 import { CreateFolderDto } from './create-folder.dto';
 
 /**

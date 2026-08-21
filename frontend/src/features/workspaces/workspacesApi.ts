@@ -4,7 +4,7 @@ import type {
   PaginationQuery,
   UpdateWorkspaceInput,
   Workspace,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 
 /**

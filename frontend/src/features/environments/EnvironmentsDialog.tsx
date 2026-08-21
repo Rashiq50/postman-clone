@@ -1,4 +1,4 @@
-import type { Environment, EnvironmentVariable } from '@postman-clone/contracts'
+import type { Environment, EnvironmentVariable } from '@raven/contracts'
 import { useEffect, useState } from 'react'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import {

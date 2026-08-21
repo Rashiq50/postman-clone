@@ -1,6 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ApiErrorCode } from '@postman-clone/contracts';
+import { ApiErrorCode } from '@raven/contracts';
 import type { ThrottlerLimitDetail, ThrottlerStorage } from '@nestjs/throttler';
 import type { ExecutionContext } from '@nestjs/common';
 import { ApiException } from '../errors/api.exception';

@@ -1,7 +1,7 @@
 import {
   WORKSPACE_NAME_MAX_LENGTH,
   type CreateWorkspaceInput,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { WorkspaceTree } from '@postman-clone/contracts';
+import type { WorkspaceTree } from '@raven/contracts';
 import { Repository } from 'typeorm';
 import { RequestEntity } from '../requests/entities/request.entity';
 import { WorkspaceEntity } from '../workspaces/entities/workspace.entity';

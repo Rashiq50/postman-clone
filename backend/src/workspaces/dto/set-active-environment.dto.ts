@@ -1,4 +1,4 @@
-import type { SetActiveEnvironmentInput } from '@postman-clone/contracts';
+import type { SetActiveEnvironmentInput } from '@raven/contracts';
 import { IsUUID, ValidateIf } from 'class-validator';
 
 /**

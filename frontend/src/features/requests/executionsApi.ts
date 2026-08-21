@@ -4,7 +4,7 @@ import type {
   RequestExecutionSummary,
   SendRequestInput,
   SendResult,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 
 /**

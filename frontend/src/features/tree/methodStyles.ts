@@ -1,4 +1,4 @@
-import type { HttpMethod } from '@postman-clone/contracts'
+import type { HttpMethod } from '@raven/contracts'
 
 /**
  * The method badge colours are text-only, like every other badge in this app.

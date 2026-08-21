@@ -1,4 +1,4 @@
-import type { FolderNode, WorkspaceTree } from '@postman-clone/contracts'
+import type { FolderNode, WorkspaceTree } from '@raven/contracts'
 
 /**
  * The **names** of the containers a request sits in — `[collection, …folders]`

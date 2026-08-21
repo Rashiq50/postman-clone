@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { WorkspaceRole, type Paginated } from '@postman-clone/contracts';
+import { WorkspaceRole, type Paginated } from '@raven/contracts';
 import { Repository } from 'typeorm';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { ApiException } from '../common/errors/api.exception';

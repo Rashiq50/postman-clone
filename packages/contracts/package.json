@@ -1,5 +1,5 @@
 {
-  "name": "@postman-clone/contracts",
+  "name": "@raven/contracts",
   "version": "0.0.0",
   "private": true,
   "description": "Wire format shared by the API and its clients. One definition, both sides.",

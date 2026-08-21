@@ -3,7 +3,7 @@ import type {
   Folder,
   MoveFolderInput,
   UpdateFolderInput,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 import { insertFolder, moveNode, removeNode, renameNode } from '../tree/treeCache'
 import { patchTree, resyncTree } from '../tree/treePatch'

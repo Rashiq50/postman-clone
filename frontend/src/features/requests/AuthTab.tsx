@@ -2,7 +2,7 @@ import {
   REQUEST_AUTH_TYPES,
   type RequestAuth,
   type RequestAuthType,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { useState } from 'react'
 import { Select } from '../../components/ui/Select'
 import { VariableInput } from '../../components/ui/VariableInput'

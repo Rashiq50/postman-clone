@@ -1,7 +1,7 @@
 import type {
   Environment,
   EnvironmentVariable,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { EnvironmentEntity } from '../entities/environment.entity';
 

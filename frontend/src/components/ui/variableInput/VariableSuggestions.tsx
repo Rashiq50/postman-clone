@@ -1,4 +1,4 @@
-import type { ResolvedVariable } from '@postman-clone/contracts'
+import type { ResolvedVariable } from '@raven/contracts'
 import { useEffect, useRef } from 'react'
 import { usePanelAnchor } from './usePanelAnchor'
 

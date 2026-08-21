@@ -1,4 +1,4 @@
-import type { AuthUser } from '@postman-clone/contracts';
+import type { AuthUser } from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { UserEntity } from '../../users/entities/user.entity';
 

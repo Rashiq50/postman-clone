@@ -7,7 +7,7 @@ import type {
   HttpMethod,
   RequestNode,
   WorkspaceTree,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 
 /**
  * Pure edits to a cached `WorkspaceTree`.

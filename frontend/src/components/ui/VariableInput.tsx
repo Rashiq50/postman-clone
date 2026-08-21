@@ -1,4 +1,4 @@
-import { openPlaceholderAt } from '@postman-clone/contracts'
+import { openPlaceholderAt } from '@raven/contracts'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useWorkspaceVariables } from '../../features/environments/useWorkspaceVariables'
 import { VariablePopover } from './variableInput/VariablePopover'

@@ -2,7 +2,7 @@ import type {
   Collection,
   CreateCollectionInput,
   UpdateCollectionInput,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 import { patchTree, resyncTree } from '../tree/treePatch'
 import { insertCollection, moveNode, removeNode, renameNode } from '../tree/treeCache'

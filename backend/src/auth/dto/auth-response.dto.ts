@@ -1,4 +1,4 @@
-import type { AuthResponse } from '@postman-clone/contracts';
+import type { AuthResponse } from '@raven/contracts';
 import { Expose, Type, plainToInstance } from 'class-transformer';
 import type { IssuedAuth } from '../auth.service';
 import { AuthUserResponseDto } from './auth-user.dto';

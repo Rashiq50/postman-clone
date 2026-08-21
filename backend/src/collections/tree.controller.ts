@@ -1,5 +1,5 @@
 import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
-import { API_VERSION, type WorkspaceTree } from '@postman-clone/contracts';
+import { API_VERSION, type WorkspaceTree } from '@raven/contracts';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { TreeService } from './tree.service';

@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { API_PREFIX, API_VERSION } from '@postman-clone/contracts';
+import { API_PREFIX, API_VERSION } from '@raven/contracts';
 import type { CookieOptions, Request, Response } from 'express';
 
 /**

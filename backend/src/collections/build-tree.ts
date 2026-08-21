@@ -4,7 +4,7 @@ import type {
   FolderNode,
   RequestNode,
   WorkspaceTree,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 
 /** The three flat result sets `TreeService` reads, before nesting. */
 export interface FlatCollection {

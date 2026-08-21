@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { THROTTLER_OPTIONS } from '@nestjs/throttler/dist/throttler.constants';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ApiErrorCode, type SendResult } from '@postman-clone/contracts';
+import { ApiErrorCode, type SendResult } from '@raven/contracts';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import request from 'supertest';

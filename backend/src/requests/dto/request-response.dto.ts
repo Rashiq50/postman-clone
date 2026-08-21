@@ -5,7 +5,7 @@ import type {
   RequestAuth,
   RequestBody,
   RequestScripts,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { RequestEntity } from '../entities/request.entity';
 

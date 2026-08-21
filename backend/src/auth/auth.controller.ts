@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { API_VERSION } from '@postman-clone/contracts';
+import { API_VERSION } from '@raven/contracts';
 import type { Request, Response } from 'express';
 import type { AuthenticatedUser } from './authenticated-user';
 import { AuthService } from './auth.service';

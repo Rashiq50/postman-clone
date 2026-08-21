@@ -1,4 +1,4 @@
-import type { SessionSummary } from '@postman-clone/contracts';
+import type { SessionSummary } from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { SessionEntity } from '../entities/session.entity';
 

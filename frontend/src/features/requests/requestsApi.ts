@@ -3,7 +3,7 @@ import type {
   CreateApiRequestInput,
   MoveApiRequestInput,
   UpdateApiRequestInput,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import { baseApi } from '../../app/baseApi'
 import {
   insertRequest,

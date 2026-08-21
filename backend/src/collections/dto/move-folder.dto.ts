@@ -1,4 +1,4 @@
-import type { MoveFolderInput } from '@postman-clone/contracts';
+import type { MoveFolderInput } from '@raven/contracts';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsUUID, Min, ValidateIf } from 'class-validator';
 

@@ -1,4 +1,4 @@
-import type { ApiRequest, UpdateApiRequestInput } from '@postman-clone/contracts'
+import type { ApiRequest, UpdateApiRequestInput } from '@raven/contracts'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { paramsFromUrl, seedUrl } from './urlQuery'
 

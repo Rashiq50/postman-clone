@@ -445,7 +445,7 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   menu at most one row has open, and it dragged the whole tree into each row's memo equation.
   Reorder gets the node's current parent from `MenuContext.parentId` (i.e. from the node itself)
   rather than by walking the tree for it.
-- **Radix is the one UI dependency, and only for behaviour.** `@radix-ui/react-dialog`,
+- **Radix is a behaviour-only dependency.** `@radix-ui/react-dialog`,
   `@radix-ui/react-tabs` and `@radix-ui/react-select` — unstyled primitives that ship a focus
   trap, Escape and outside-press handling, scroll lock, focus restore, roving arrow-key focus,
   listbox typeahead, popper collision flipping and the ARIA wiring. ⚠️ **They
@@ -521,9 +521,7 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
     The native controls they replaced were keyboard- and screen-reader-correct for free; that
     correctness now rests on Radix rather than on the browser. Nothing else may be added on the strength of "we already have Radix" — each package
     is its own decision.
-- No icon library and no editor library — a text glyph for the kebab (`⋯`) and a plain
-  `<textarea>` with a Format JSON button. Both are dependency decisions belonging to the
-  execution slice. The glyphs in [NodeIcon.tsx](frontend/src/features/tree/NodeIcon.tsx) are
+- **No icon library**, still — a text glyph for the kebab (`⋯`). The glyphs in [NodeIcon.tsx](frontend/src/features/tree/NodeIcon.tsx) are
   hand-written inline SVG for the same reason, drawn in `currentColor` only — a baked-in hex
   would be the one thing on the page that ignores the theme.
   - **A folder is a folder** (open when expanded). **A collection has no icon**: an archive box
@@ -714,11 +712,86 @@ unit-tested and deliberately uncalled** — a cron hook point, exactly like
 `deleteExpiredSessions()`. `@nestjs/schedule` is still not a dependency and this slice did
 not make it one.
 
+## Syntax highlighting
+
+Two consumers, **two different answers, and the split is the whole point**: colour for
+reading is a tokenizer, colour for *typing* is an editor, and only the second is worth a
+dependency.
+
+- **The response pane highlights with no dependency at all.**
+  [jsonSyntax.ts](frontend/src/features/requests/jsonSyntax.ts) is a ~120-line hand-written
+  JSON scanner returning `{ kind, text }` tokens, which `BodyView` renders as `<span>`s. It
+  is **total** — it never throws and never rejects, so a body that stops being valid JSON
+  halfway through still renders in full, just with less colour after the break.
+  - ⚠️ **`prettify` is the single "is this JSON?" test**, and its answer is threaded down as
+    `canPretty` to gate the Pretty/Raw toggle *and* the highlighting. Deriving that answer
+    twice is how the two would come to disagree — a body prettified but uncoloured.
+  - ⚠️ **`plain` tokens (whitespace, anything unrecognised) render as bare text nodes, not
+    `<span>`s**, and adjacent same-kind spans are merged in a second pass. Indentation is by
+    far the most common token in a prettified document; wrapping it would roughly double the
+    node count to colour nothing.
+  - ⚠️ **`HIGHLIGHT_MAX_CHARS` (100 kB) is the whole performance story, and it is not about
+    the scanner** — which does 423 kB in ~18ms and is linear. It is about React reconciling
+    and the browser laying out one span per token: 100 kB of prettified JSON is ~20,000
+    spans. Over the cap the pane renders the plain `<pre>` **and says so**; degrading
+    silently would read as "this response was not recognised as JSON", a lie about the data
+    rather than a statement about its size.
+  - ⚠️ **The `useMemo` sits above `BodyView`'s early returns.** An `empty` or `base64` body
+    returns before the `<pre>`, so a hook below them changes the hook order between two
+    responses — a bug that only fires on the *second* send. It is memoized because the pane
+    re-renders on every pointermove while the split handle is dragged.
+
+- **The request body uses CodeMirror 6**, in
+  [CodeEditor.tsx](frontend/src/components/ui/CodeEditor.tsx) — the app's one editor
+  dependency and its largest single one. A body is typed into, and keeping a highlight layer
+  in register with a caret, a selection, wrapping and IME composition is the part not worth
+  hand-writing: a transparent `<textarea>` over a mirrored `<pre>` desynchronises on wrap and
+  on composition and presents as *the app dropping keystrokes*.
+  - **Monaco was considered and rejected**: ~1 MB gzip against CodeMirror's ~120, a worker
+    build, and — decisively — it defines its themes in JavaScript, which would put every
+    syntax colour outside the CSS `check-contrast.mjs` parses. Same "unchecked, and invisible
+    because it is unchecked" objection as a styled component kit.
+  - ⚠️ **The cost is recorded, as Radix's is: six packages, +311 kB raw / +102 kB gzip**
+    (565.76/176.91 → 877.12/279.25 on `yarn build`) — three times all of Radix. **Nothing may
+    be added on the strength of "we already have CodeMirror"**: no autocomplete, no lint, no
+    search panel, no collab. Each is a separate `@codemirror/*` package precisely so it can be
+    declined. If the number must come down, the lever is a lazy `import()` — the editor is one
+    tab of five.
+  - ⚠️ **`HighlightStyle` is defined with `class:`, not `color:`**, so Lezer's tags resolve
+    through the same `--syntax-*` tokens as the response pane and `yarn contrast` audits them.
+    The chrome is `EditorView.theme` with `var(--…)` values. **There is no hex literal in that
+    file**, and adding a theme still needs no edit there. Painting it with a CodeMirror theme
+    package would undo the entire argument for choosing CodeMirror.
+  - ⚠️ **The view is built once, in a genuinely empty-dependency effect.** Everything it reads
+    is behind a ref (`onChange`, the seed doc, `ariaLabel`, `placeholderText`) or a
+    `Compartment` (the language). Rebuilding throws away the undo history, the caret and the
+    scroll position — and `onChange` in particular *must* be a ref, since the update listener
+    is baked into the initial `EditorState` and a captured callback goes stale on the parent's
+    first re-render, silently writing into a dead draft.
+  - ⚠️ **The value sync dispatches only when the incoming text differs from the document.**
+    Every keystroke round-trips through the parent and comes back; dispatching the identical
+    text would replace the whole document and collapse the selection to the end on every
+    character. The check is what makes it a stable controlled component.
+  - ⚠️ **`indentWithTab` is deliberately absent.** It makes Tab insert indentation, which
+    turns the editor into a keyboard trap — a Tab-only user reaching the body field could
+    never leave it. Format JSON already does the indentation people actually want.
+  - The border and focus ring live on the **wrapper** in `BodyTab`, not in the editor:
+    CodeMirror renders its own focusable `contenteditable`, so a `focus:` utility never
+    matches and `focus-within` is what makes it read like the app's other inputs. The
+    editor's background is `transparent` — an opaque fill would be one opaque rectangle in
+    the middle of the glass theme's frosted card.
+  - **`{{variables}}` are still not marked up in the body**, and CodeMirror does not change
+    that: it means a `ViewPlugin` with its own decoration set plus the environment data
+    `BodyTab` does not receive. A feature, not a styling detail. They still interpolate on
+    send.
+  - **`ScriptsTab` deliberately keeps its plain `<textarea>`.** The scripts are stored and
+    never executed, so an editor there would dress up a feature that does not exist.
+
 ## Theming
 
 **Every colour is a semantic token.** Components say `bg-surface`, `text-fg-muted`,
-`border-line`, `ring-focus`, `text-method-get` — never `bg-white`, `text-slate-500` or
-`bg-indigo-600`. All five themes are blocks of custom properties in
+`border-line`, `ring-focus`, `text-method-get`, `text-syntax-key` — never `bg-white`,
+`text-slate-500` or `bg-indigo-600`. All five themes are blocks of custom properties in
 [index.css](frontend/src/index.css) and nothing else, which is the invariant that makes a
 another theme one CSS block instead of a thirty-file audit.
 
@@ -766,6 +839,28 @@ another theme one CSS block instead of a thirty-file audit.
     paints the ground itself, so a wash on `body` alone would be covered and never seen.
     `background-attachment: fixed` keeps nested canvases in register instead of each
     restarting the gradient at its own corner.
+- ⚠️ **The brand is the one place a fixed hex is allowed, and only outside the app.**
+  The product is **Raven**; its mark is a perched corvid drawn as a neon outline. In-app
+  it is `BrandMark` in [AuthArt.tsx](frontend/src/features/auth/AuthArt.tsx) — hand-written
+  paths in **`currentColor` only**, inheriting `text-accent`, used by `AuthLayout` and
+  `AppHeader`. The standalone assets in `frontend/public/` (`favicon.svg`,
+  `raven-mark.svg`, `raven-lockup.svg`) do carry the fixed
+  `#7e14ff → #863bff → #47bfff` neon gradient, because a favicon and a lockup sit on a
+  background this app does not control and there is no `var()` to read there. **Do not
+  copy that gradient into a component**, and do not "fix" `BrandMark` to match the asset —
+  the divergence is the rule working.
+  - The glow is `.neon-mark`, a `drop-shadow` in **`currentColor`** applied only under
+    `:root[data-appearance='dark']`. It introduces no token and no `PAIRS` entry on
+    purpose: a drop-shadow paints outside the glyph, so it is not a foreground on a
+    background and there is nothing for `check-contrast.mjs` to measure.
+- **`--syntax-*` is a five-token family serving two renderers** — the response pane's
+  hand-written tokenizer and CodeMirror's `HighlightStyle` — which is what keeps the two from
+  drifting into different palettes six inches apart on the same screen. Its hues intentionally
+  echo each theme's `--method-*` set for the same reason. It is checked against **both**
+  `--canvas` (the response `<pre>` sits straight on it) and `--surface` (the editor sits in
+  the request editor's card); a later XML or GraphQL mode needs no new token, only a mapping
+  onto these. `--syntax-punctuation` is checked at 3.0 rather than 4.5, like `fg-faint`:
+  braces and commas are structure, not prose.
 - **`yarn contrast` is the guard on all of that**
   ([check-contrast.mjs](frontend/scripts/check-contrast.mjs)). It parses the CSS rather than
   importing it, composites alpha against the real surface stack — `--surface` over
@@ -925,9 +1020,10 @@ throttler wiring; `backend/test/send.e2e-spec.ts` covers the API end to end agai
 
 The one new dependency is **none**: the transport is `node:http`/`node:https`, chosen partly
 because `undici`'s `Agent` (the other way to pin a connection) is not installed and Node's
-global `fetch` does not expose it. The response pane is a plain `<pre>` with a Pretty/Raw
-toggle — the syntax-highlighting question `BodyTab` deferred *to this slice* was reconsidered
-here and answered the same way.
+global `fetch` does not expose it. **The response pane shipped as a plain `<pre>` with a
+Pretty/Raw toggle, and the syntax-highlighting question `BodyTab` had deferred *to this
+slice* was answered "not yet" here as well. It has since been answered properly — see
+*Syntax highlighting* below, which is where the app's editor dependency arrived.**
 
 Deliberately **not** built here, each for a stated reason: **script execution** (the slots
 are stored and never run; a sandbox is the security surface and `node:vm` is not a security
@@ -954,6 +1050,31 @@ right fix. Until then `test:e2e` runs `--runInBand`: `auth.e2e-spec.ts` and
 `session-cap.e2e-spec.ts` both mutate the *same* seed user's sessions, so in parallel workers one
 suite deletes rows the other is mid-assertion about. Removing that flag makes the session-cap
 suite fail intermittently and for reasons that have nothing to do with the session cap.
+
+## The rebrand
+
+The project was `postman-clone` and is now **Raven**. The rename covered the product name,
+the brand assets, `<title>`, the auth panel, `AppHeader`, the README, the root
+`package.json` name, and the contracts scope — **`@postman-clone/contracts` is now
+`@raven/contracts`**, in 123 files plus both lockfiles, `scripts/sync-contracts.mjs` **and
+`scripts/sync-contracts.sh`** (the second is the one the root `yarn build` calls, and it is
+easy to miss because nothing else reads it).
+
+⚠️ **Three identifiers deliberately still spell the old name**, and each is a trap for a
+well-meaning tidy-up:
+
+- **`DB_NAME=postman_clone`** — renaming means creating a database and re-running every
+  migration into it.
+- **`JWT_ISSUER=postman-clone` / `JWT_AUDIENCE=postman-clone-api`**, their Joi defaults in
+  `env.validation.ts`, and the two guard specs that hard-code them. These are *pinned into
+  signed tokens*: changing them invalidates every access token in flight, so it is a
+  deliberate forced logout, not a side effect of a rename. Change all five spellings
+  together or the guard rejects tokens the signer just minted.
+- **`pc.theme`, `pc.theme.appearance`, `pc.tree.expanded.<workspaceId>`** — renaming a
+  storage key silently *discards* what it holds, so every user's theme resets to System and
+  every sidebar collapses. The `pc.` prefix is invisible to users.
+
+All three are recorded in the README under *Rebrand leftovers* as well.
 
 ## Conventions
 

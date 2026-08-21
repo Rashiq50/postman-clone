@@ -1,4 +1,4 @@
-import type { ResponseBodyPayload, ResponseHeader } from '@postman-clone/contracts'
+import type { ResponseBodyPayload, ResponseHeader } from '@raven/contracts'
 
 /**
  * The pure half of the response toolbar: what a response is called when it is

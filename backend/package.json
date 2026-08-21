@@ -36,7 +36,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.3",
-    "@postman-clone/contracts": "file:../packages/contracts",
+    "@raven/contracts": "file:../packages/contracts",
     "argon2": "^0.45.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",

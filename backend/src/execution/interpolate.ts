@@ -6,7 +6,7 @@ import {
   type RequestBody,
   type ResolvedVariable,
   type SendWarning,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 
 /**
  * `{{var}}` substitution — pure. No Nest, no DB, no I/O, so every rule below is
@@ -31,7 +31,7 @@ import {
  */
 
 /**
- * ⚠️ The syntax and the merge live in **`@postman-clone/contracts`**, not here.
+ * ⚠️ The syntax and the merge live in **`@raven/contracts`**, not here.
  * The request editor highlights `{{var}}` chips and offers autocomplete from
  * the same regex and the same lookup table this file substitutes with — a
  * second copy on the client is how a chip comes to say "not defined" for a name
@@ -40,8 +40,8 @@ import {
  * They are re-exported so that this module stays the one import site for the
  * send path, and so that `interpolate.spec.ts` keeps covering them from here.
  */
-export { buildVariables } from '@postman-clone/contracts';
-export type { VariableScope, ResolvedVariable } from '@postman-clone/contracts';
+export { buildVariables } from '@raven/contracts';
+export type { VariableScope, ResolvedVariable } from '@raven/contracts';
 
 /** Where a placeholder was found, for the warning text. */
 export type InterpolationSite = string;

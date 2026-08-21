@@ -1,4 +1,4 @@
-import { isApiError, type ApiErrorBody } from '@postman-clone/contracts'
+import { isApiError, type ApiErrorBody } from '@raven/contracts'
 import type { SerializedError } from '@reduxjs/toolkit'
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query'
 

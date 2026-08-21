@@ -1,5 +1,5 @@
 import { OmitType, PartialType } from '@nestjs/mapped-types';
-import type { UpdateEnvironmentInput } from '@postman-clone/contracts';
+import type { UpdateEnvironmentInput } from '@raven/contracts';
 import { CreateEnvironmentDto } from './create-environment.dto';
 
 export class UpdateEnvironmentDto

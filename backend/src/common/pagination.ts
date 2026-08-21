@@ -1,4 +1,4 @@
-import type { Paginated } from '@postman-clone/contracts';
+import type { Paginated } from '@raven/contracts';
 
 /** Wraps a page of results in the envelope every list endpoint returns. */
 export function paginated<T>(

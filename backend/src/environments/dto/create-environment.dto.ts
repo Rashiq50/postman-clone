@@ -2,7 +2,7 @@ import {
   ENVIRONMENT_NAME_MAX_LENGTH,
   type CreateEnvironmentInput,
   type EnvironmentVariable,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import { Transform } from 'class-transformer';
 import {
   IsNotEmpty,

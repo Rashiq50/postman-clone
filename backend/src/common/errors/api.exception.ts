@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { ApiErrorCode, type ApiErrorDetail } from '@postman-clone/contracts';
+import { ApiErrorCode, type ApiErrorDetail } from '@raven/contracts';
 
 interface ApiExceptionPayload {
   code: ApiErrorCode;

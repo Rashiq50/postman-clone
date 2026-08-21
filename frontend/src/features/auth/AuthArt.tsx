@@ -1,5 +1,7 @@
 /**
- * The inline glyphs used by the two auth screens.
+ * The inline glyphs used by the two auth screens, plus the brand mark — which
+ * `AppHeader` imports from here too, since the app has exactly one logo and a
+ * second copy is a second thing to redraw.
  *
  * ⚠️ Hand-written SVG in `currentColor`, no icon library — the same call
  * [NodeIcon](../tree/NodeIcon.tsx) already makes, and for the same reasons: a
@@ -18,52 +20,37 @@ const SVG_PROPS = {
 } as const
 
 /**
- * The wordmark's glyph: a send arrow inside a rounded square.
+ * The brand glyph: Raven, a perched corvid drawn as a single neon outline.
  *
- * Send is the app's primary verb, so the mark is the same idea as the URL bar's
- * primary button rather than a generic abstract shape.
+ * ⚠️ **It is drawn in `currentColor` only** — the standalone assets in
+ * `public/` (`raven-mark.svg`, `raven-lockup.svg`, `raven-favicon.svg`) carry
+ * the fixed violet-to-cyan neon gradient, but those sit on a background this
+ * app does not control. In here the mark inherits `text-accent` and re-themes
+ * with everything else; a baked-in hex would be the one thing on the page that
+ * ignores the theme. The glow is `.neon-mark` in `index.css`, which spends a
+ * `drop-shadow` in `currentColor` and only under `data-appearance='dark'`,
+ * where a glow has something to sit on.
  */
 export function BrandMark({ className = 'size-9' }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 32 32"
-      className={className}
+      viewBox="0 0 64 64"
+      className={`neon-mark ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.6}
+      strokeLinejoin="round"
+      strokeLinecap="round"
       aria-hidden
       focusable="false"
     >
-      <rect
-        x="1"
-        y="1"
-        width="30"
-        height="30"
-        rx="9"
-        fill="currentColor"
-        opacity="0.12"
-      />
-      <rect
-        x="1"
-        y="1"
-        width="30"
-        height="30"
-        rx="9"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        opacity="0.35"
-      />
-      <path
-        d="M9.5 16.2 22.5 10l-4.2 12.6-2.6-5.2-6.2-1.2Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path
-        d="m15.7 17.4 3.4-3.4"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
+      {/* Body: beak, crown, back, wedge tail, belly, breast, throat. */}
+      <path d="M60.5 19.3C55 15.5 51 13 47 12.5C42 8 34 9 31 15C28 21 27 28 24.5 33.5C19 39 11 47 3 56.5L7.5 59C13.5 52 19.5 45.5 26 41C30 39.5 34 40 38 40C44 38 47 33 46 27C45.5 23.5 47 21.5 49 20.5C52.5 20.2 56.5 20 60.5 19.3Z" />
+      {/* Folded wing. */}
+      <path d="M32.5 17C28 23 24 31 19.5 41C27 38 33 32 36.5 25C36.5 21 35 18.5 32.5 17Z" />
+      {/* Legs. */}
+      <path d="M37.5 40.5L36 47.5M41.5 39.5L42.5 47" />
+      <circle cx="44.5" cy="16.5" r="1.9" fill="currentColor" stroke="none" />
     </svg>
   )
 }

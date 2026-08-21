@@ -1,4 +1,4 @@
-import type { SendDraft, SendResult } from '@postman-clone/contracts'
+import type { SendDraft, SendResult } from '@raven/contracts'
 import { useCallback, useRef, useState } from 'react'
 import { useSendRequestMutation } from './executionsApi'
 

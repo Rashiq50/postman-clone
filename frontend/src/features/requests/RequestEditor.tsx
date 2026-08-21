@@ -2,7 +2,7 @@ import type {
   KeyValueEntry,
   RequestExecution,
   SendResult,
-} from '@postman-clone/contracts'
+} from '@raven/contracts'
 import * as Tabs from '@radix-ui/react-tabs'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useEffect, useRef, useState, type ReactNode } from 'react'

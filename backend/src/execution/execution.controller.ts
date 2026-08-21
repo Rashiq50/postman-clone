@@ -16,7 +16,7 @@ import {
   API_VERSION,
   type Paginated,
   type SendResult,
-} from '@postman-clone/contracts';
+} from '@raven/contracts';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';

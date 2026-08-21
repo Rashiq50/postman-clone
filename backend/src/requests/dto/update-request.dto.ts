@@ -1,5 +1,5 @@
 import { OmitType, PartialType } from '@nestjs/mapped-types';
-import type { UpdateApiRequestInput } from '@postman-clone/contracts';
+import type { UpdateApiRequestInput } from '@raven/contracts';
 import { CreateRequestDto } from './create-request.dto';
 
 /**
