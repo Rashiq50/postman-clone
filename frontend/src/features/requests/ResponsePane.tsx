@@ -4,16 +4,20 @@ import type {
   ResponseHeader,
   SendTiming,
   SendWarning,
-} from '@postman-clone/contracts'
-import * as Tabs from '@radix-ui/react-tabs'
-import { useRef, useState } from 'react'
-import { HistoryPane } from './HistoryPane'
+} from "@postman-clone/contracts";
+import * as Tabs from "@radix-ui/react-tabs";
+import { useRef, useState } from "react";
+import { HistoryPane } from "./HistoryPane";
+import { ResponseActions } from "./ResponseActions";
+import { contentTypeOf, downloadResponse, headersAsText } from "./responseFile";
 import {
   failureStyle,
   formatBytes,
   formatDuration,
   statusStyle,
-} from './statusStyles'
+} from "./statusStyles";
+import { Chevron } from "../tree/NodeRow";
+import { ChevronIcon } from "../tree/NodeIcon";
 
 /**
  * What the pane renders. Deliberately **not** `SendResult`: a live send and a
@@ -22,30 +26,23 @@ import {
  * two-outcome contract exists to avoid.
  */
 export interface ResponseView {
-  outcome: 'response' | 'failure'
-  status: number | null
-  statusText: string | null
-  failureKind: string | null
-  failureMessage: string | null
-  headers: ResponseHeader[]
-  body: ResponseBodyPayload
-  bodyBytes: number | null
-  bodyTruncated: boolean
-  redirects: RedirectHop[]
-  warnings: SendWarning[]
-  timing: SendTiming | null
-  url: string
+  outcome: "response" | "failure";
+  status: number | null;
+  statusText: string | null;
+  failureKind: string | null;
+  failureMessage: string | null;
+  headers: ResponseHeader[];
+  body: ResponseBodyPayload;
+  bodyBytes: number | null;
+  bodyTruncated: boolean;
+  redirects: RedirectHop[];
+  warnings: SendWarning[];
+  timing: SendTiming | null;
+  url: string;
 }
 
-const PANE_TABS = ['Body', 'Headers', 'History'] as const
-type PaneTab = (typeof PANE_TABS)[number]
-
-function contentTypeOf(headers: ResponseHeader[]): string {
-  return (
-    headers.find((header) => header.name.toLowerCase() === 'content-type')
-      ?.value ?? ''
-  )
-}
+const PANE_TABS = ["Body", "Headers", "History"] as const;
+type PaneTab = (typeof PANE_TABS)[number];
 
 /**
  * Pretty-prints JSON, reusing `BodyTab`'s approach.
@@ -58,9 +55,9 @@ function contentTypeOf(headers: ResponseHeader[]): string {
  */
 function prettify(text: string): string | null {
   try {
-    return JSON.stringify(JSON.parse(text), null, 2)
+    return JSON.stringify(JSON.parse(text), null, 2);
   } catch {
-    return null
+    return null;
   }
 }
 
@@ -68,66 +65,65 @@ function BodyView({
   body,
   headers,
   bodyBytes,
+  displayed,
+  canPretty,
+  pretty,
+  onPrettyChange,
 }: {
-  body: ResponseBodyPayload
-  headers: ResponseHeader[]
-  bodyBytes: number | null
+  body: ResponseBodyPayload;
+  headers: ResponseHeader[];
+  bodyBytes: number | null;
+  /** The text to render, already resolved against the Pretty/Raw toggle. */
+  displayed: string;
+  canPretty: boolean;
+  pretty: boolean;
+  onPrettyChange: (pretty: boolean) => void;
 }) {
-  const [pretty, setPretty] = useState(true)
-
-  if (body.encoding === 'empty') {
-    return <p className="p-4 text-sm text-fg-faint">No response body.</p>
+  if (body.encoding === "empty") {
+    return <p className="p-4 text-sm text-fg-faint">No response body.</p>;
   }
 
-  if (body.encoding === 'base64') {
-    const type = contentTypeOf(headers) || 'application/octet-stream'
-    // Built at click time and revoked immediately after: a URL created on every
-    // render would leak one object URL per render for a pane nobody downloads
-    // from most of the time.
-    const download = () => {
-      const bytes = Uint8Array.from(atob(body.base64), (c) => c.charCodeAt(0))
-      const url = URL.createObjectURL(new Blob([bytes], { type }))
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = 'response'
-      anchor.click()
-      URL.revokeObjectURL(url)
-    }
+  if (body.encoding === "base64") {
+    const type = contentTypeOf(headers) || "application/octet-stream";
 
     return (
       <div className="space-y-3 p-4">
         {/* ⚠️ Never the base64 blob rendered as text — a megabyte of it would
             lock the pane and tell the reader nothing. */}
         <p className="text-sm text-fg-muted">
-          Binary response — {type.split(';')[0]}
+          Binary response — {type.split(";")[0]}
           {bodyBytes !== null && `, ${formatBytes(bodyBytes)}`}
         </p>
+        {/*
+          The header toolbar's Download does the same thing, and deliberately so
+          — it is the *only* action available for a binary body, and a row of
+          6px icons is not where a reader with nothing else to click will look.
+          Both call `downloadResponse`, so there is one implementation.
+        */}
         <button
           type="button"
-          onClick={download}
+          onClick={() => downloadResponse(body, headers)}
           className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm text-fg-muted transition hover:bg-surface-muted"
         >
           Download
         </button>
       </div>
-    )
+    );
   }
-
-  const prettified = prettify(body.text)
 
   return (
     <div className="flex h-full flex-col">
-      {prettified !== null && (
+      {canPretty && (
         <div className="flex shrink-0 gap-1 px-3 pt-2">
-          {(['Pretty', 'Raw'] as const).map((mode) => (
+          {(["Pretty", "Raw"] as const).map((mode) => (
             <button
               key={mode}
               type="button"
-              onClick={() => setPretty(mode === 'Pretty')}
+              onClick={() => onPrettyChange(mode === "Pretty")}
               className={`rounded px-2 py-0.5 text-xs font-medium transition ${
-                pretty === (mode === 'Pretty')
-                  ? 'bg-accent-soft text-accent-soft-fg'
-                  : 'text-fg-subtle hover:bg-surface-muted'
+                pretty === (mode === "Pretty")
+                  ? "bg-accent-soft text-accent-soft-fg"
+                  : "text-fg-subtle hover:bg-surface-muted"
               }`}
             >
               {mode}
@@ -136,15 +132,15 @@ function BodyView({
         </div>
       )}
       <pre className="min-h-0 flex-1 overflow-auto p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-fg">
-        {pretty && prettified !== null ? prettified : body.text}
+        {displayed}
       </pre>
     </div>
-  )
+  );
 }
 
 function HeadersView({ headers }: { headers: ResponseHeader[] }) {
   if (headers.length === 0) {
-    return <p className="p-4 text-sm text-fg-faint">No response headers.</p>
+    return <p className="p-4 text-sm text-fg-faint">No response headers.</p>;
   }
   return (
     <table className="w-full text-left text-xs">
@@ -161,7 +157,7 @@ function HeadersView({ headers }: { headers: ResponseHeader[] }) {
         ))}
       </tbody>
     </table>
-  )
+  );
 }
 
 /**
@@ -184,68 +180,115 @@ export function ResponsePane({
   historyView,
   onSelectHistory,
   onClearHistoryView,
+  onClear,
 }: {
-  view: ResponseView | null
-  requestId: string
-  isSending: boolean
-  error: string | null
-  collapsed: boolean
-  onToggleCollapsed: () => void
+  view: ResponseView | null;
+  requestId: string;
+  isSending: boolean;
+  error: string | null;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   /** Non-null while the pane is showing a stored run rather than the last send. */
-  historyView: { id: string } | null
-  onSelectHistory: (id: string) => void
-  onClearHistoryView: () => void
+  historyView: { id: string } | null;
+  onSelectHistory: (id: string) => void;
+  onClearHistoryView: () => void;
+  /** Discards whatever the pane is showing — the live result *and* any past run. */
+  onClear: () => void;
 }) {
-  const [tab, setTab] = useState<PaneTab>('Body')
+  const [tab, setTab] = useState<PaneTab>("Body");
+
+  /**
+   * ⚠️ The Pretty/Raw choice lives here, not in `BodyView`, because the header's
+   * Copy and Download must hand over **what is on screen**. A toggle owned by
+   * the view would leave the toolbar copying raw text while the user reads the
+   * prettified version — which looks like a bug in the formatter, not in Copy.
+   */
+  const [pretty, setPretty] = useState(true);
+
+  const bodyText = view?.body.encoding === "text" ? view.body.text : null;
+  const prettified = bodyText === null ? null : prettify(bodyText);
+  const displayedBody =
+    bodyText === null
+      ? ""
+      : pretty && prettified !== null
+        ? prettified
+        : bodyText;
+
+  /**
+   * What the toolbar acts on, per tab. A failure has no body, so Copy hands
+   * over the failure itself — which is the thing a person pastes into a bug
+   * report.
+   */
+  const copyText = (() => {
+    if (!view) return null;
+    if (tab === "Headers") {
+      return view.headers.length > 0 ? headersAsText(view.headers) : null;
+    }
+    if (tab !== "Body") return null;
+    if (view.outcome === "failure") {
+      return `${view.failureKind}: ${view.failureMessage}`;
+    }
+    // `displayedBody`, not `bodyText` — see the note on `pretty` above.
+    return bodyText === null ? null : displayedBody;
+  })();
+
+  const canDownload =
+    tab !== "History" && view !== null && view.body.encoding !== "empty";
 
   /**
    * The user-dragged height in px; `null` means the default `basis-[45%]`.
    * In-memory only, like the tab — a pane height is not worth a storage key.
    * It survives collapse/expand so reopening lands where the user left it.
    */
-  const [height, setHeight] = useState<number | null>(null)
-  const sectionRef = useRef<HTMLElement>(null)
-  const drag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null)
+  const [height, setHeight] = useState<number | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const drag = useRef<{
+    pointerId: number;
+    startY: number;
+    startHeight: number;
+  } | null>(null);
 
   /** Keep at least a strip of pane and at least 10rem of editor above it. */
   const clampHeight = (next: number) => {
-    const parent = sectionRef.current?.parentElement
-    const max = parent ? parent.clientHeight - 160 : Number.POSITIVE_INFINITY
-    return Math.min(Math.max(next, 96), Math.max(max, 96))
-  }
+    const parent = sectionRef.current?.parentElement;
+    const max = parent ? parent.clientHeight - 160 : Number.POSITIVE_INFINITY;
+    return Math.min(Math.max(next, 96), Math.max(max, 96));
+  };
 
   // Pointer capture instead of window listeners: move/up keep firing on the
   // handle even once the pointer leaves it, and there is nothing to clean up
   // on unmount because nothing global was attached.
   const onHandlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    const section = sectionRef.current
-    if (!section) return
-    event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
+    const section = sectionRef.current;
+    if (!section) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = {
       pointerId: event.pointerId,
       startY: event.clientY,
       startHeight: section.offsetHeight,
-    }
-  }
+    };
+  };
 
   const onHandlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const active = drag.current
-    if (!active || active.pointerId !== event.pointerId) return
+    const active = drag.current;
+    if (!active || active.pointerId !== event.pointerId) return;
     // The pane hangs from the bottom, so dragging *up* grows it.
-    setHeight(clampHeight(active.startHeight + (active.startY - event.clientY)))
-  }
+    setHeight(
+      clampHeight(active.startHeight + (active.startY - event.clientY)),
+    );
+  };
 
   const onHandlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (drag.current?.pointerId !== event.pointerId) return
-    drag.current = null
-  }
+    if (drag.current?.pointerId !== event.pointerId) return;
+    drag.current = null;
+  };
 
   return (
     <section
       ref={sectionRef}
       className={`flex min-h-0 shrink-0 flex-col border-t border-line ${
-        collapsed ? 'h-9' : height === null ? 'basis-[45%]' : ''
+        collapsed ? "h-9" : height === null ? "basis-[45%]" : ""
       }`}
       style={!collapsed && height !== null ? { height } : undefined}
       aria-label="Response"
@@ -266,12 +309,12 @@ export function ResponsePane({
           onPointerCancel={onHandlePointerUp}
           onDoubleClick={() => setHeight(null)}
           onKeyDown={(event) => {
-            const section = sectionRef.current
-            if (!section) return
-            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-              event.preventDefault()
-              const delta = event.key === 'ArrowUp' ? 24 : -24
-              setHeight(clampHeight(section.offsetHeight + delta))
+            const section = sectionRef.current;
+            if (!section) return;
+            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+              event.preventDefault();
+              const delta = event.key === "ArrowUp" ? 24 : -24;
+              setHeight(clampHeight(section.offsetHeight + delta));
             }
           }}
           className="-mt-px h-1 shrink-0 cursor-row-resize touch-none transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
@@ -282,19 +325,22 @@ export function ResponsePane({
           type="button"
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
-          className="rounded px-1 text-xs text-fg-subtle transition hover:bg-surface-muted"
+          className="rounded px-1 text-xs text-fg-subtle transition hover:bg-surface-muted flex justify-center gap-1"
         >
-          {collapsed ? '▸' : '▾'} Response
+          <span>
+            <ChevronIcon expanded={!collapsed} />
+          </span>
+          <span>Response</span>
         </button>
 
         {isSending && <span className="text-xs text-fg-subtle">Sending…</span>}
 
         {!isSending && view && (
-          <>
+          <div className="flex gap-4 ml-auto items-center">
             {/* ⚠️ A failure gets **no status pill at all**. A `0` or `—` where a
                 status code goes is the exact confusion the two-outcome
                 contract exists to prevent. */}
-            {view.outcome === 'response' && view.status !== null ? (
+            {view.outcome === "response" && view.status !== null ? (
               <span
                 className={`rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${statusStyle(view.status)}`}
               >
@@ -321,11 +367,30 @@ export function ResponsePane({
             {view.redirects.length > 0 && (
               <span className="text-xs text-fg-faint">
                 {view.redirects.length} redirect
-                {view.redirects.length === 1 ? '' : 's'}
+                {view.redirects.length === 1 ? "" : "s"}
               </span>
             )}
-          </>
+          </div>
         )}
+
+        {/*
+          ⚠️ The toolbar is rendered while collapsed too, and that is on purpose:
+          the collapsed header still names a status, so the response it belongs
+          to is still "there" and clearing or copying it are still meaningful.
+          `ml-auto` pins it right, away from the status metadata on the left.
+        */}
+        <div className="">
+          <ResponseActions
+            copyText={collapsed ? null : copyText}
+            onDownload={
+              canDownload && view
+                ? () => downloadResponse(view.body, view.headers)
+                : null
+            }
+            onClear={onClear}
+            canClear={view !== null || error !== null}
+          />
+        </div>
       </header>
 
       {!collapsed && (
@@ -350,7 +415,7 @@ export function ResponsePane({
             {/* ⚠️ Without this banner a user clicks a history row, sees a body,
                 and believes their last Send returned it — the same class of bug
                 as the Scripts banner. */}
-            {historyView && tab !== 'History' && (
+            {historyView && tab !== "History" && (
               <div className="flex items-center gap-2 border-b border-line bg-warning-soft px-3 py-1.5 text-xs text-warning-soft-fg">
                 <span>Viewing a past run, not your last send.</span>
                 <button
@@ -363,7 +428,7 @@ export function ResponsePane({
               </div>
             )}
 
-            {error && tab !== 'History' && (
+            {error && tab !== "History" && (
               <p
                 role="alert"
                 className="m-3 rounded-md border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger-soft-fg"
@@ -372,7 +437,7 @@ export function ResponsePane({
               </p>
             )}
 
-            {view && view.warnings.length > 0 && tab !== 'History' && (
+            {view && view.warnings.length > 0 && tab !== "History" && (
               <ul className="border-b border-line bg-warning-soft px-3 py-1.5 text-xs text-warning-soft-fg">
                 {view.warnings.map((warning, index) => (
                   <li key={index}>{warning.message}</li>
@@ -386,7 +451,7 @@ export function ResponsePane({
                   Press Send to make a request.
                 </p>
               )}
-              {view?.outcome === 'failure' && (
+              {view?.outcome === "failure" && (
                 <div className="m-3 rounded-md border border-danger-line bg-danger-soft p-3">
                   <p className="text-sm font-medium text-danger-soft-fg">
                     {view.failureKind}
@@ -396,16 +461,23 @@ export function ResponsePane({
                   </p>
                 </div>
               )}
-              {view?.outcome === 'response' && (
+              {view?.outcome === "response" && (
                 <BodyView
                   body={view.body}
                   headers={view.headers}
                   bodyBytes={view.bodyBytes}
+                  displayed={displayedBody}
+                  canPretty={prettified !== null}
+                  pretty={pretty}
+                  onPrettyChange={setPretty}
                 />
               )}
             </Tabs.Content>
 
-            <Tabs.Content value="Headers" className="focus-visible:outline-none">
+            <Tabs.Content
+              value="Headers"
+              className="focus-visible:outline-none"
+            >
               {view ? (
                 <HeadersView headers={view.headers} />
               ) : (
@@ -413,7 +485,10 @@ export function ResponsePane({
               )}
             </Tabs.Content>
 
-            <Tabs.Content value="History" className="focus-visible:outline-none">
+            <Tabs.Content
+              value="History"
+              className="focus-visible:outline-none"
+            >
               <HistoryPane
                 requestId={requestId}
                 selectedId={historyView?.id ?? null}
@@ -424,5 +499,5 @@ export function ResponsePane({
         </Tabs.Root>
       )}
     </section>
-  )
+  );
 }

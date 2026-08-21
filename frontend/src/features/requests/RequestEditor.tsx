@@ -533,6 +533,16 @@ export function RequestEditor() {
           setResponseCollapsed(false)
         }}
         onClearHistoryView={() => setHistoryId(null)}
+        // ⚠️ Clear discards *both* sources the pane can be showing. Clearing
+        // only the live result while a history row is selected would leave the
+        // past run on screen and read as a dead button; clearing only the
+        // selection would snap back to the last send, which is not "clear"
+        // either. It empties the pane, and it deletes nothing on the server —
+        // the stored run is still in History.
+        onClear={() => {
+          setHistoryId(null)
+          resetSend()
+        }}
       />
       </div>
     </div>

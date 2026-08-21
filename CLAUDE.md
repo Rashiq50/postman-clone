@@ -656,6 +656,38 @@ policy and the per-user throttle, not by the role table. Clearing history is `WR
 - ⚠️ **The history pane needs its "viewing a past run" banner.** Without it a user clicks a
   history row, sees a body, and believes their last Send returned it — the same class of bug
   as the Scripts banner.
+- **The pane's header carries three icon buttons — copy, download, clear** —
+  in [ResponseActions.tsx](frontend/src/features/requests/ResponseActions.tsx), with the pure
+  half (`downloadResponse`, `contentTypeOf`, `headersAsText`, the extension map) split into
+  [responseFile.ts](frontend/src/features/requests/responseFile.ts). ⚠️ The split is not
+  taste: a module exporting both components and plain functions breaks fast refresh for the
+  whole file, and `oxlint`'s `only-export-components` is the warning that catches it. The
+  frontend lint is clean and stays clean.
+  - ⚠️ **They act on what is rendered, never on `result`.** The pane also shows stored runs,
+    so a Copy reading the live send while the user looks at a past one is the same bug the
+    "viewing a past run" banner exists to prevent. Everything is derived from the one
+    `ResponseView`.
+  - ⚠️ **That is why the Pretty/Raw toggle moved up into `ResponsePane`.** `BodyView` is now
+    controlled. A toggle owned by the view would leave Copy handing over raw text while the
+    reader sees prettified — which looks like a broken formatter, not a broken Copy.
+  - **Copy follows the active tab**: the displayed body on Body, `Name: value` lines on
+    Headers, `kind: message` for a `failure` (what a person pastes into a bug report), and
+    nothing on History. Disabled rather than hidden — buttons that come and go on a tab
+    change make the header jump.
+  - **Clear discards both sources at once** (`setHistoryId(null)` *and* `resetSend()`), and
+    destroys nothing server-side — the run is still in History. Clearing one and not the
+    other leaves the pane showing something and reads as a dead button.
+  - ⚠️ The binary body keeps its own large Download button beside the toolbar's. Both call
+    `downloadResponse`, so the duplication is in the affordance only: for a binary response it
+    is the single available action, and a 14px glyph is not where the reader will look.
+  - ⚠️ `navigator.clipboard` is undefined on an insecure origin and refusable by permissions
+    policy, so the copy is wrapped and reports "Could not copy" rather than doing nothing. The
+    tick is a visual confirmation only — the `role="status"` line beside it is what a screen
+    reader gets, and the reset is a `setTimeout` cleared on unmount (navigating away while it
+    is up unmounts the button mid-flight).
+  - The glyphs are hand-written inline SVG in `currentColor`, like `NodeIcon` and `AuthArt`,
+    and every button carries both `aria-label` and `title` — no tooltip library, same call
+    `NodeMenu` makes about a dropdown library.
 
 ### Throttling, revisited
 
