@@ -279,29 +279,44 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
   - The card takes `glass`, not `glass-tint`: the canvas wash passes behind it and nothing
     `position: fixed` lives inside it, which is the pair of conditions *Theming* sets for
     spending a backdrop blur.
-- **The header carries no account chrome of its own — it carries one menu.**
-  [UserMenu.tsx](frontend/src/features/auth/UserMenu.tsx) holds the identity block, the two
-  `/profile` links, the theme and Sign out; [AppHeader](frontend/src/features/auth/AppHeader.tsx)
-  keeps only what is *about the workspace you are looking at* (the switcher and the environment
-  picker). The nav pair (Workspace/Sessions) is gone: the workspace is home, and Sessions is a
-  sub-page of Profile.
-  - ⚠️ **`UserMenu` is hand-written and must not become `@radix-ui/react-dropdown-menu`.** That
-    would be a *fourth* Radix package, and the rule above is explicit that nothing is added on
-    the strength of "we already have Radix". What it would buy — focus trap, Escape,
-    outside-press, roving arrow keys — is the ~60 lines already there, for one menu mounted
-    once. (`NodeMenu` is hand-written for a *different* reason — thousands of instances — so
-    this is not a second copy of that argument, but it lands in the same place.)
-  - ⚠️ Its panel is **`absolute`, not `fixed`** — the opposite of `NodeMenu`'s. The header is not
-    a scroll container, so there is no clip to escape, and `absolute` moves with the header for
-    free. The header's `glass` does not interfere: a `backdrop-filter` makes an element a
-    containing block for `fixed` descendants, not for absolute ones.
-  - ⚠️ **Focus returns to the trigger on every close**, Escape and outside-click included — not
-    only on selecting an item. The same failure `Dialog` and `NodeMenu` each handle in their own
-    way, and the same symptom: a keyboard user dropped on `<body>`.
-  - ⚠️ **The theme is a list of `menuitemradio`s, not a nested `Select`.** A popover inside a
-    popover is two focus contexts fighting over Escape, and Escape closes the wrong one.
-    `ThemeMenu` still exists and is still the control on the auth pages, where there is no menu
-    to put it in.
+- **The header is the brand, the workspace switcher, the environment picker, and two menus.**
+  [AppHeader](frontend/src/features/auth/AppHeader.tsx) keeps only what is *about the workspace
+  you are looking at*; the rest is [ThemeButton](frontend/src/features/theme/ThemeButton.tsx)
+  and [UserMenu](frontend/src/features/auth/UserMenu.tsx). The nav pair (Workspace/Sessions) is
+  gone: the workspace is home, and Sessions is a sub-page of Profile.
+  - ⚠️ **The header row is always full width; the `wide` prop is gone.** It used to inherit
+    `AppShell`'s centred `max-w-3xl` column, so moving from the workbench to `/profile` narrowed
+    the chrome and slid the brand and the controls inward — the app's frame appearing to resize
+    around a page change. The frame is the frame; only `<main>` centres. Reintroducing the prop
+    brings the jump back.
+  - ⚠️ **The theme is its own icon button, not an item in the account menu.** It is per browser,
+    not per account, so it is not an account setting — and it is changed far more often than
+    anything under a user's own name should be buried. Its rows carry each theme's `hint` as a
+    second line (the strings `ThemeMenu`'s `Select` shows on the auth pages), because "Glass"
+    and "Midnight" tell a first-time reader nothing on their own. A sun/moon glyph would be
+    wrong on the trigger: five themes across two appearances is not a binary toggle.
+  - ⚠️ **`UserMenu` lists Profile and Sign out — not Sessions.** Sessions is one click away
+    inside `/profile`'s own sub-nav, and listing it here too made the menu a second, competing
+    navigation for the same pages: the one that silently goes stale when a third sub-page
+    appears.
+  - **Both menus share [Menu.tsx](frontend/src/components/ui/Menu.tsx)**, so their keyboard
+    behaviour cannot diverge. ⚠️ It is hand-written and must not become
+    `@radix-ui/react-dropdown-menu` — a *fourth* Radix package, against the rule above that
+    nothing is added on the strength of "we already have Radix". What it would buy (Escape,
+    outside-press, focus restore, roving arrow keys) is the ~70 lines there, shared by both.
+    (`NodeMenu` stays separate: it is hand-written for a *different* reason — thousands of
+    instances, a `fixed` panel escaping the sidebar's clip — and folding it in would drag that
+    positioning problem into a component that does not have it.)
+  - ⚠️ `Menu`'s panel is **`absolute`, not `fixed`** — the opposite of `NodeMenu`'s. The header
+    is not a scroll container, so there is no clip to escape. The header's `glass` does not
+    interfere: a `backdrop-filter` makes an element a containing block for `fixed` descendants,
+    not for absolute ones.
+  - ⚠️ **Focus returns to the trigger on every close**, Escape included — not only on selecting
+    an item. The exception is an outside click, which moves focus itself; restoring there would
+    yank it back from whatever the user just clicked.
+  - ⚠️ **Items are found by role from the DOM**, not passed as a model. That is what lets one
+    call site render `menuitem` buttons and the other `menuitemradio` rows with no shared item
+    type, and it makes an arrow-key order that disagrees with the visual order unrepresentable.
   - ⚠️ The `resize` listener is a **named** handler. `removeEventListener` compares by identity,
     so an inline arrow is added on every open and never removed.
 - **`/profile` and `/profile/sessions`**, under `AppShell`, with
