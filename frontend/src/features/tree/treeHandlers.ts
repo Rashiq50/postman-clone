@@ -19,6 +19,12 @@ export interface TreeHandlers {
   commitRename: (kind: NodeKind, id: string, name: string) => void
   openRequest: (id: string) => void
   /**
+   * Opens the same "New request" prompt as the kebab menu. Exists so an empty
+   * collection or folder can offer an inline "Add request" affordance instead
+   * of a dead "Empty" label — `parentFolderId` is `null` for a collection root.
+   */
+  newRequestIn: (collectionId: string, parentFolderId: string | null) => void
+  /**
    * Built at menu-*open* time, never during render: a `MenuItem[]` per mounted
    * row per render was the largest allocation in this tree, and the items are
    * only ever read by a menu the user has opened.

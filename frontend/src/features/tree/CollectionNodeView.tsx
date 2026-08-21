@@ -97,7 +97,16 @@ export const CollectionNodeView = memo(function CollectionNodeView({
             />
           ))}
           {node.folders.length === 0 && node.requests.length === 0 && (
-            <p className="py-1 pl-[40px] text-xs text-fg-faint">Empty</p>
+            // Not a dead "Empty" label: the one thing to do with an empty
+            // collection is put a request in it, so the empty state *is* that
+            // action. Same prompt as the kebab menu's "New request".
+            <button
+              type="button"
+              onClick={() => handlers.newRequestIn(node.id, null)}
+              className="block w-full py-1 pl-[40px] text-left text-xs text-fg-faint transition hover:text-accent"
+            >
+              <span aria-hidden>+ </span>Add request
+            </button>
           )}
         </>
       )}

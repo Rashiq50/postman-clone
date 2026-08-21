@@ -101,12 +101,16 @@ export const FolderNodeView = memo(function FolderNodeView({
             />
           ))}
           {node.folders.length === 0 && node.requests.length === 0 && (
-            <p
-              className="py-1 text-xs text-fg-faint"
+            // Same reasoning as `CollectionNodeView`'s empty state: the label
+            // becomes the action it was describing the absence of.
+            <button
+              type="button"
+              onClick={() => handlers.newRequestIn(collectionId, node.id)}
+              className="block w-full py-1 text-left text-xs text-fg-faint transition hover:text-accent"
               style={{ paddingLeft: 8 + (depth + 1) * 14 }}
             >
-              Empty
-            </p>
+              <span aria-hidden>+ </span>Add request
+            </button>
           )}
         </>
       )}

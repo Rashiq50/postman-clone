@@ -89,6 +89,21 @@ export function RequestUrlBar({
         workspaceId={workspaceId}
         label="Request URL"
         placeholder="https://api.example.com/users"
+        // Enter sends, matching every URL bar the user has ever typed into.
+        // This only fires for keys the field did not consume, so Enter while
+        // the {{variable}} suggestion list is open still picks the suggestion.
+        // Same guard as the button: no send mid-send, none without a URL.
+        onKeyDown={(event) => {
+          if (
+            event.key === 'Enter' &&
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !isSending &&
+            url.trim() !== ''
+          ) {
+            onSend()
+          }
+        }}
         className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition hover:border-fg-faint focus:border-accent"
       />
 

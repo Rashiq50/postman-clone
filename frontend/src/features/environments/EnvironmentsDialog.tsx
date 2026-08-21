@@ -12,6 +12,7 @@ import {
   useCreateEnvironmentMutation,
   useDeleteEnvironmentMutation,
   useGetEnvironmentsQuery,
+  useSetActiveEnvironmentMutation,
   useUpdateEnvironmentMutation,
 } from './environmentsApi'
 
@@ -42,6 +43,7 @@ export function EnvironmentsDialog({
   const [updateEnvironment, { isLoading: isSaving }] =
     useUpdateEnvironmentMutation()
   const [deleteEnvironment] = useDeleteEnvironmentMutation()
+  const [setActiveEnvironment] = useSetActiveEnvironmentMutation()
 
   const environments = data?.data ?? []
 
@@ -129,7 +131,18 @@ export function EnvironmentsDialog({
                     onSubmit: (name) => {
                       void createEnvironment({ workspaceId, name })
                         .unwrap()
-                        .then((created) => setSelectedId(created.id))
+                        .then((created) => {
+                          setSelectedId(created.id)
+                          // A freshly created environment becomes the active
+                          // one: the only reason to create one is to use it,
+                          // and forgetting to switch presents as every
+                          // {{variable}} silently failing to resolve. The
+                          // mutation's optimistic patch updates the picker.
+                          void setActiveEnvironment({
+                            workspaceId,
+                            environmentId: created.id,
+                          })
+                        })
                         .catch(() => undefined)
                     },
                   })

@@ -153,6 +153,25 @@ export function Sidebar() {
       }
     }
 
+    // Shared by the kebab menu's "New request" and the empty-node "Add
+    // request" button, so the two cannot drift. `expandId` is the node whose
+    // subtree should be open when the response patches the new request in.
+    const promptNewRequest = (
+      collectionId: string,
+      folderId: string | null,
+      expandId: string,
+    ) =>
+      setPrompt({
+        title: 'New request',
+        label: 'Request name',
+        initialValue: 'New request',
+        confirmLabel: 'Create',
+        onSubmit: (name) => {
+          void createRequest({ workspaceId: ws!, collectionId, folderId, name })
+          ui.expandAll([expandId])
+        },
+      })
+
     const menuFor = (
       kind: NodeKind,
       node: { id: string; name: string },
@@ -212,21 +231,11 @@ export function Sidebar() {
         items.push({
           label: 'New request',
           onSelect: () =>
-            setPrompt({
-              title: 'New request',
-              label: 'Request name',
-              initialValue: 'New request',
-              confirmLabel: 'Create',
-              onSubmit: (name) => {
-                void createRequest({
-                  workspaceId: ws!,
-                  collectionId: context.collectionId,
-                  folderId: kind === 'folder' ? node.id : null,
-                  name,
-                })
-                ui.expandAll([node.id])
-              },
-            }),
+            promptNewRequest(
+              context.collectionId,
+              kind === 'folder' ? node.id : null,
+              node.id,
+            ),
         })
       }
 
@@ -299,6 +308,12 @@ export function Sidebar() {
       cancelRename: () => ui.startRename(null),
       commitRename: rename,
       openRequest: (id) => void navigate(`/w/${ws}/requests/${id}`),
+      newRequestIn: (collectionId, parentFolderId) =>
+        promptNewRequest(
+          collectionId,
+          parentFolderId,
+          parentFolderId ?? collectionId,
+        ),
       menuFor,
     }
   }, [

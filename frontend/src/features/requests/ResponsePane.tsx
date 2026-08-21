@@ -6,7 +6,7 @@ import type {
   SendWarning,
 } from '@postman-clone/contracts'
 import * as Tabs from '@radix-ui/react-tabs'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { HistoryPane } from './HistoryPane'
 import {
   failureStyle,
@@ -198,13 +198,85 @@ export function ResponsePane({
 }) {
   const [tab, setTab] = useState<PaneTab>('Body')
 
+  /**
+   * The user-dragged height in px; `null` means the default `basis-[45%]`.
+   * In-memory only, like the tab — a pane height is not worth a storage key.
+   * It survives collapse/expand so reopening lands where the user left it.
+   */
+  const [height, setHeight] = useState<number | null>(null)
+  const sectionRef = useRef<HTMLElement>(null)
+  const drag = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null)
+
+  /** Keep at least a strip of pane and at least 10rem of editor above it. */
+  const clampHeight = (next: number) => {
+    const parent = sectionRef.current?.parentElement
+    const max = parent ? parent.clientHeight - 160 : Number.POSITIVE_INFINITY
+    return Math.min(Math.max(next, 96), Math.max(max, 96))
+  }
+
+  // Pointer capture instead of window listeners: move/up keep firing on the
+  // handle even once the pointer leaves it, and there is nothing to clean up
+  // on unmount because nothing global was attached.
+  const onHandlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const section = sectionRef.current
+    if (!section) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    drag.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: section.offsetHeight,
+    }
+  }
+
+  const onHandlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const active = drag.current
+    if (!active || active.pointerId !== event.pointerId) return
+    // The pane hangs from the bottom, so dragging *up* grows it.
+    setHeight(clampHeight(active.startHeight + (active.startY - event.clientY)))
+  }
+
+  const onHandlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (drag.current?.pointerId !== event.pointerId) return
+    drag.current = null
+  }
+
   return (
     <section
+      ref={sectionRef}
       className={`flex min-h-0 shrink-0 flex-col border-t border-line ${
-        collapsed ? 'h-9' : 'basis-[45%]'
+        collapsed ? 'h-9' : height === null ? 'basis-[45%]' : ''
       }`}
+      style={!collapsed && height !== null ? { height } : undefined}
       aria-label="Response"
     >
+      {/* The resize handle: a thin strip riding the pane's top edge. Hidden
+          while collapsed — a 36px strip has nothing meaningful to resize.
+          Keyboard users get the same affordance through arrow keys, and a
+          double-click returns to the default split. */}
+      {!collapsed && (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize response pane"
+          tabIndex={0}
+          onPointerDown={onHandlePointerDown}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={onHandlePointerUp}
+          onPointerCancel={onHandlePointerUp}
+          onDoubleClick={() => setHeight(null)}
+          onKeyDown={(event) => {
+            const section = sectionRef.current
+            if (!section) return
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+              event.preventDefault()
+              const delta = event.key === 'ArrowUp' ? 24 : -24
+              setHeight(clampHeight(section.offsetHeight + delta))
+            }
+          }}
+          className="-mt-px h-1 shrink-0 cursor-row-resize touch-none transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+        />
+      )}
       <header className="flex h-9 shrink-0 items-center gap-3 bg-surface px-4 glass-tint">
         <button
           type="button"
