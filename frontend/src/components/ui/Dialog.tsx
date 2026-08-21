@@ -30,6 +30,7 @@ export function Dialog({
   description,
   children,
   footer,
+  size = 'sm',
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -39,6 +40,16 @@ export function Dialog({
   children?: ReactNode
   /** Actions, right-aligned. Left out entirely when a dialog has none. */
   footer?: ReactNode
+  /**
+   * Width. `sm` is the prompt/confirm shape; `lg` is for a dialog with real
+   * content laid out inside it (the environment manager's list + variable
+   * grid), and it is viewport-relative — a fixed `max-w-*` that looks roomy
+   * on a laptop is a postage stamp on a 1440p monitor, so `lg` takes 92vw up
+   * to a 72rem line-length cap. ⚠️ It is a fixed set rather than a `className` escape hatch on
+   * purpose — a free-form class at the call site is how "one modal shell"
+   * becomes "every dialog picks its own padding".
+   */
+  size?: 'sm' | 'lg'
 }) {
   /**
    * ⚠️ Focus restore is done here, not left to Radix, because call sites mount
@@ -74,7 +85,17 @@ export function Dialog({
           // content is its own portal child, so it cannot be centred by the
           // overlay without nesting it — and nesting puts the outside-press
           // target inside the dialog.
-          className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg bg-surface p-4 shadow-xl outline-none glass"
+          // The panel is a flex column with a capped height so a tall body
+          // scrolls inside the dialog rather than off the viewport, which a
+          // `fixed`, translate-centred element does silently: the overflow goes
+          // above the top edge, where there is nothing to scroll it back into
+          // view. ⚠️ `min-h-0` on the scrolling child is what makes that real —
+          // a flex child defaults to `min-height: auto` and refuses to shrink.
+          className={`fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-4rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg bg-surface p-4 shadow-xl outline-none glass ${
+            size === 'lg'
+              ? 'w-[min(92vw,72rem)]'
+              : 'w-[calc(100%-2rem)] max-w-sm'
+          }`}
         >
           <RadixDialog.Title className="text-sm font-medium text-fg">
             {title}
@@ -86,9 +107,13 @@ export function Dialog({
             </RadixDialog.Description>
           )}
 
-          {children && <div className="mt-3">{children}</div>}
+          {children && (
+            <div className="mt-3 min-h-0 flex-1 overflow-y-auto">{children}</div>
+          )}
 
-          {footer && <div className="mt-4 flex justify-end gap-2">{footer}</div>}
+          {footer && (
+            <div className="mt-4 flex shrink-0 justify-end gap-2">{footer}</div>
+          )}
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>

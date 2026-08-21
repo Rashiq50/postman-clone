@@ -383,6 +383,7 @@ export function RequestEditor() {
         <RequestUrlBar
           method={draft.method}
           url={draft.url}
+          workspaceId={workspaceId}
           isDirty={isDirty}
           isSaving={isSaving}
           isSending={isSending}

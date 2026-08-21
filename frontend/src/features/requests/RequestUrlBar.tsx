@@ -1,5 +1,6 @@
 import { HTTP_METHODS, type HttpMethod } from '@postman-clone/contracts'
 import { Select } from '../../components/ui/Select'
+import { VariableInput } from '../../components/ui/VariableInput'
 import { methodStyles } from '../tree/methodStyles'
 
 /**
@@ -30,6 +31,7 @@ import { methodStyles } from '../tree/methodStyles'
 export function RequestUrlBar({
   method,
   url,
+  workspaceId,
   isDirty,
   isSaving,
   isSending,
@@ -41,6 +43,8 @@ export function RequestUrlBar({
 }: {
   method: HttpMethod
   url: string
+  /** For resolving `{{variables}}` in the field — see `VariableInput`. */
+  workspaceId: string | undefined
   isDirty: boolean
   isSaving: boolean
   isSending: boolean
@@ -74,13 +78,18 @@ export function RequestUrlBar({
         }))}
       />
 
-      <input
+      {/* Not a plain `<input>`: `{{variables}}` are painted as chips that say
+          whether the active environment defines them, and typing `{{` offers
+          the names it does. The URL is where that matters most — an unresolved
+          placeholder here is left literal, fails `new URL()` and comes back as
+          `invalid-url`, so knowing before pressing Send is the whole point. */}
+      <VariableInput
         value={url}
-        aria-label="Request URL"
+        onChange={onUrlChange}
+        workspaceId={workspaceId}
+        label="Request URL"
         placeholder="https://api.example.com/users"
-        spellCheck={false}
-        onChange={(e) => onUrlChange(e.target.value)}
-        className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition placeholder:text-fg-faint hover:border-fg-faint focus:border-accent"
+        className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition hover:border-fg-faint focus:border-accent"
       />
 
       {/* Enabled whenever there is a URL to send to — nothing else. */}

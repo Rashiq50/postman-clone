@@ -1,4 +1,8 @@
-import type { EnvironmentVariable } from '@postman-clone/contracts';
+import {
+  openPlaceholderAt,
+  tokenize,
+  type EnvironmentVariable,
+} from '@postman-clone/contracts';
 import {
   buildVariables,
   interpolateRequest,
@@ -332,5 +336,115 @@ describe('interpolateRequest', () => {
     );
 
     expect(secretValues.size).toBe(0);
+  });
+});
+
+/**
+ * The editor's highlighter and autocomplete are built on `tokenize` and
+ * `openPlaceholderAt`, which live in contracts beside the regex this file's
+ * substituter uses. They are tested **here**, next to `interpolateRequest`,
+ * because the property that matters is not that either one works alone but
+ * that they agree: a chip must be drawn around exactly the span the send path
+ * would replace. The frontend has no test runner, so this is the only place
+ * that check can live.
+ */
+describe('tokenize', () => {
+  it('reconstructs its input exactly', () => {
+    // The editor repaints the contenteditable from these tokens on every
+    // keystroke and then restores the caret by character offset. If joining
+    // the tokens did not give the input back verbatim, the caret would drift.
+    for (const input of [
+      '',
+      'https://api.example.com/users',
+      '{{baseUrl}}/users/{{id}}',
+      '{{a}}{{b}}',
+      'no placeholders at all',
+      '{{}}',
+      '{{ spaced }}',
+      'trailing {{open',
+      '}}leading',
+    ]) {
+      expect(
+        tokenize(input)
+          .map((token) => token.text)
+          .join(''),
+      ).toBe(input);
+    }
+  });
+
+  it('reports offsets that bracket the placeholder', () => {
+    const tokens = tokenize('a{{x}}b');
+
+    expect(tokens).toEqual([
+      { kind: 'text', text: 'a', start: 0, end: 1 },
+      { kind: 'var', text: '{{x}}', name: 'x', start: 1, end: 6 },
+      { kind: 'text', text: 'b', start: 6, end: 7 },
+    ]);
+  });
+
+  it('trims the name exactly as the substituter does', () => {
+    // `{{ baseUrl }}` resolves when sent, so the chip must not read as
+    // undefined. This is the assertion that keeps those two in step.
+    const [token] = tokenize('{{ baseUrl }}');
+    expect(token).toMatchObject({ kind: 'var', name: 'baseUrl' });
+
+    const vars = buildVariables([
+      { name: 'environment', variables: [variable('baseUrl', 'https://x')] },
+    ]);
+    expect(
+      interpolateRequest(baseRequest({ url: '{{ baseUrl }}/y' }), vars).resolved
+        .url,
+    ).toBe('https://x/y');
+  });
+
+  it('does not nest: only the inner placeholder matches', () => {
+    expect(tokenize('{{a{{b}}c}}').filter((t) => t.kind === 'var')).toEqual([
+      { kind: 'var', text: '{{b}}', name: 'b', start: 3, end: 8 },
+    ]);
+  });
+
+  it('leaves an unterminated placeholder as plain text', () => {
+    expect(tokenize('{{open')).toEqual([
+      { kind: 'text', text: '{{open', start: 0, end: 6 },
+    ]);
+  });
+
+  it('emits no empty text tokens between adjacent placeholders', () => {
+    expect(tokenize('{{a}}{{b}}').every((token) => token.text !== '')).toBe(
+      true,
+    );
+  });
+});
+
+describe('openPlaceholderAt', () => {
+  it('finds the placeholder the caret is still typing', () => {
+    expect(openPlaceholderAt('https://{{ba', 12)).toEqual({
+      start: 8,
+      query: 'ba',
+    });
+  });
+
+  it('opens on the bare braces, before anything is typed', () => {
+    expect(openPlaceholderAt('{{', 2)).toEqual({ start: 0, query: '' });
+  });
+
+  it('answers null once the placeholder is closed', () => {
+    expect(openPlaceholderAt('{{base}}', 8)).toBeNull();
+  });
+
+  it('reads from the caret, not the end of the string', () => {
+    // The caret sits inside the first placeholder; the second is irrelevant.
+    expect(openPlaceholderAt('{{ba}} and {{other}}', 4)).toEqual({
+      start: 0,
+      query: 'ba',
+    });
+  });
+
+  it('closes on a stray brace, exactly where the match would break', () => {
+    expect(openPlaceholderAt('{{ba{', 5)).toBeNull();
+  });
+
+  it('answers null when there is no open placeholder', () => {
+    expect(openPlaceholderAt('https://api.example.com', 10)).toBeNull();
   });
 });

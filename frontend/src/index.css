@@ -543,3 +543,40 @@
     color: var(--accent-soft-fg);
   }
 }
+
+/*
+ * `VariableInput`'s contenteditable host.
+ *
+ * A contenteditable is not a form control, so the three things an `<input>`
+ * gives for free have to be declared: it must not wrap (it is single-line by
+ * contract, and a wrapped line would also break the caret arithmetic), it must
+ * scroll horizontally instead of growing, and it has no placeholder at all.
+ *
+ * ⚠️ `white-space: pre` — not `pre-wrap`, not `nowrap`. `nowrap` collapses runs
+ * of spaces, so typing two spaces would silently produce one and the value in
+ * the DOM would stop matching the value in React. `pre` keeps every character
+ * the user typed, which is the premise the offset arithmetic rests on.
+ *
+ * The placeholder is drawn only while the field is genuinely empty. After a
+ * select-all-and-delete the browser can leave a stray `<br>` behind, so `:empty`
+ * alone is not enough — the repaint sets `innerHTML` to the empty string, which
+ * is what keeps `:empty` true.
+ */
+@layer base {
+  .variable-input {
+    white-space: pre;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .variable-input::-webkit-scrollbar {
+    display: none;
+  }
+
+  .variable-input:empty::before {
+    content: attr(data-placeholder);
+    color: var(--fg-faint);
+    pointer-events: none;
+  }
+}

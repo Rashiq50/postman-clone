@@ -95,6 +95,10 @@ export function EnvironmentsDialog({
         open
         onOpenChange={(next) => !next && onClose()}
         title="Environments"
+        // Wide: the variable grid is five columns and the list sits beside it.
+        // At the default `sm` the grid was narrower than its own `min-w` and
+        // lived permanently inside a horizontal scrollbar.
+        size="lg"
         description="Variables here are substituted into {{placeholders}} when a request is sent."
         footer={
           <>
@@ -108,8 +112,8 @@ export function EnvironmentsDialog({
           </>
         }
       >
-        <div className="flex min-h-[18rem] gap-4">
-          <div className="w-48 shrink-0 border-r border-line pr-3">
+        <div className="flex min-h-[min(60vh,34rem)] gap-4">
+          <div className="w-56 shrink-0 border-r border-line pr-3">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-medium text-fg-subtle">
                 Environments

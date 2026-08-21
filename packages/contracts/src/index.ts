@@ -8,4 +8,5 @@ export * from './pagination';
 export * from './password';
 export * from './request';
 export * from './tree';
+export * from './variables';
 export * from './workspace';
