@@ -289,6 +289,11 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
     the chrome and slid the brand and the controls inward — the app's frame appearing to resize
     around a page change. The frame is the frame; only `<main>` centres. Reintroducing the prop
     brings the jump back.
+  - ⚠️ **`WorkspaceSwitcher` and `EnvironmentPicker` both render nothing without a
+    `:workspaceId`.** They describe the workspace you are looking at, and on `/profile` there is
+    none — the switcher previously fell back to its `placeholder` there, which reads as a
+    workspace having failed to load rather than as one not being relevant. The two guards are
+    now the same line for the same reason; keep them that way.
   - ⚠️ **The theme is its own icon button, not an item in the account menu.** It is per browser,
     not per account, so it is not an account setting — and it is changed far more often than
     anything under a user's own name should be buried. Its rows carry each theme's `hint` as a
