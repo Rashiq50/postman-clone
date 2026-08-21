@@ -77,7 +77,7 @@ export function KeyValueEditor({
                     label={`${keyPlaceholder} ${index + 1}`}
                     workspaceId={workspaceId}
                     onChange={(key) => update(index, { key })}
-                    className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-xs outline-none hover:border-line focus:border-accent"
+                    className="w-full rounded border border-transparent bg-transparent px-2 py-1.5 font-mono text-sm outline-none hover:border-line focus:border-accent"
                   />
                 </td>
                 <td className="px-2 py-1">
@@ -87,7 +87,7 @@ export function KeyValueEditor({
                     label={`Value ${index + 1}`}
                     workspaceId={workspaceId}
                     onChange={(value) => update(index, { value })}
-                    className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 font-mono text-xs outline-none hover:border-line focus:border-accent"
+                    className="w-full rounded border border-transparent bg-transparent px-2 py-1.5 font-mono text-sm outline-none hover:border-line focus:border-accent"
                   />
                 </td>
                 <td className="px-2 py-1">
