@@ -66,7 +66,15 @@ describe('Workspaces, collections and requests (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(THROTTLER_OPTIONS)
-      .useValue({ throttlers: [{ name: 'burst', ttl: 60000, limit: 500 }] })
+      // All four registered windows — see the note in `register.e2e-spec.ts`.
+      .useValue({
+        throttlers: [
+          { name: 'burst', ttl: 60000, limit: 500 },
+          { name: 'sustained', ttl: 3600000, limit: 500 },
+          { name: 'sendBurst', ttl: 60000, limit: 500 },
+          { name: 'sendSustained', ttl: 3600000, limit: 500 },
+        ],
+      })
       .compile();
 
     app = moduleFixture.createNestApplication();

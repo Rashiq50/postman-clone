@@ -4,6 +4,13 @@
  * Clients branch on `code`, never on `message` — messages are for humans and
  * are free to be reworded or localised without it being a breaking change.
  * Adding a code is additive; renaming or removing one is not.
+ *
+ * ⚠️ **Sending a request added no codes, deliberately.** Every outcome that is
+ * *about the upstream* — a refused connection, a blocked address, a timeout, a
+ * 500 from the target — is a **200** carrying a `SendResult` whose `result` is
+ * `{ outcome: 'failure', kind }` (see `execution.ts`). A `SEND_BLOCKED` code
+ * would create two ways to express one concept and split the client's
+ * rendering into two paths. Do not "complete" this enum with one.
  */
 export const ApiErrorCode = {
   /** Request body or query failed validation. Carries `details`. */

@@ -141,11 +141,22 @@ export const baseQueryWithReauth: BaseQueryFn<
 export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
-  // Deliberately no `Collection`, `Folder` or `Environment` tag. None of them
-  // has a read endpoint in this slice — collections and folders exist only
-  // inside the tree, and nothing consumes environments yet — and a tag nothing
-  // provides is dead weight that makes the cache look covered where it is not.
-  // Each arrives with the feature that reads it.
-  tagTypes: ["Session", "Me", "Workspace", "Tree", "Request"],
+  // Deliberately still no `Collection` or `Folder` tag: neither has a read
+  // endpoint — they exist only inside the tree — and a tag nothing provides is
+  // dead weight that makes the cache look covered where it is not. Each
+  // arrives with the feature that reads it.
+  //
+  // `Environment` and `Execution` arrived with Send, under exactly that rule:
+  // both now have read endpoints and real subscribers (the environment picker
+  // and editor, the per-request history pane).
+  tagTypes: [
+    "Session",
+    "Me",
+    "Workspace",
+    "Tree",
+    "Request",
+    "Environment",
+    "Execution",
+  ],
   endpoints: () => ({}),
 });

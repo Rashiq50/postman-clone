@@ -184,10 +184,11 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
 - The single `baseApi` lives in [app/baseApi.ts](frontend/src/app/baseApi.ts) rather than in any
   one feature folder — `features/auth`, `features/tree` and `features/requests` all depend on
   it. Features extend it via `injectEndpoints`; never call `createApi` a second time.
-- `tagTypes` is `Session`, `Me`, `Workspace`, `Tree`, `Request`. There is deliberately
-  **no `Collection`, `Folder` or `Environment` tag**: none has a read endpoint, so nothing
-  would provide one, and a tag nothing provides makes the cache look covered where it is not.
-  Each arrives with the feature that reads it.
+- `tagTypes` is `Session`, `Me`, `Workspace`, `Tree`, `Request`, `Environment`, `Execution`.
+  There is still deliberately **no `Collection` or `Folder` tag**: neither has a read
+  endpoint — they exist only inside the tree — and a tag nothing provides makes the cache
+  look covered where it is not. Each arrives with the feature that reads it, which is
+  exactly how `Environment` and `Execution` arrived with Send.
 - The access token is held **in memory only**, in `authSlice`. No `localStorage`, no
   `sessionStorage`, no `redux-persist`. A reload restores the session through the refresh cookie.
   Adding any persistence layer here is the thing to catch in review. (The theme preference is
@@ -342,7 +343,8 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   whatever the user was typing — intermittent, and presents as a dropped keystroke. There is no
   autosave either: autosave plus a tree that invalidates on renames is a refetch storm.
 - **The request editor's chrome states what the draft is doing, because nothing else can.**
-  With no autosave and no Send, a saved request and an edited one look identical otherwise. So
+  With no autosave, a saved request and an edited one look identical otherwise — and Send
+  makes that *more* pressing, not less, since Send deliberately fires the draft. So
   the header carries a `role="status"` dirty pill (`Saving…` / `Unsaved changes` / `Saved`,
   `isSaving` tested *first* — a request stays dirty until its response lands), and each tab
   carries a badge built from the draft: a count of the *enabled and non-blank* rows for Params
@@ -501,8 +503,148 @@ hand test. `workspaces.e2e-spec.ts` has the assertion that catches it.
   - ⚠️ The folder icon renders **inside** `NodeRow`'s label button, which is therefore a flex
     row: the label needs its own `truncate` span, since `truncate` on the button no longer
     reaches it.
-- **No Send button, not even a disabled one.** Deliberate; see `RequestUrlBar.tsx`.
+- **Send is the primary action of the URL bar**, to the left of a now-secondary Save. It is
+  ⚠️ **not gated on `isDirty` and it sends the draft**: there is no autosave, so gating it
+  on a clean draft makes the pane feel broken, and firing the last *saved* request while the
+  user looks at their edits is the most confusing behaviour available. The server records
+  `usedDraft`. See the Send section below.
 - Login and register default their post-auth `from` to `/`, the workbench.
+
+## Send
+
+`POST /requests/:id/send` is the execution engine, in `backend/src/execution/`. The layers
+are `interpolate.ts` → `ssrf.ts` → `http-client.ts`, each pure or nearly so and each with a
+spec; `execution.service.ts` orchestrates them and `executions.service.ts` records the run.
+
+**⚠️ The one idea that shapes everything: a failed upstream request is not an API error of
+ours.** `/send` answers **200** whether the target returned 200, returned 500, refused the
+connection, or was blocked before a socket opened. The result is a union discriminated on
+`outcome`. Our error envelope is reserved strictly for *our* failures: a malformed DTO
+(400), a request not visible (404) or a role too low (403), an environment not visible
+(404), a rate limit (429), an unexpected throw (500). Collapsing upstream failures into
+`ApiException` would make a 500 from the target indistinguishable from our own backend
+crashing, would force the client to branch on our HTTP status, would mean the response pane
+could never show a 4xx body — which is most of what a person presses Send to look at — and
+would make history and the live pane need two renderers for one concept. There are
+deliberately **no new `ApiErrorCode`s**; `error.ts` records why.
+
+**Sending is a read-like act**: the request is loaded with `READ_ROLES`, so a VIEWER may
+send. They can already read the URL and the plaintext bearer token out of `GET /requests/:id`,
+so refusing them leaks nothing and buys nothing; the egress concern is answered by the SSRF
+policy and the per-user throttle, not by the role table. Clearing history is `WRITE_ROLES`
+— it destroys shared data. Reversing either is one constant.
+
+### Traps
+
+- ⚠️ **Screening and connecting must be one act.** `resolveAndScreen` returns addresses and
+  the connection is pinned to one via a `lookup` function passed through `http.request`.
+  Screening a *hostname* and letting Node re-resolve it is a DNS-rebinding hole that passes
+  every hand test, because the attack needs a second query to fire. The `lookup` route also
+  keeps SNI and the `Host` header derived from the hostname, so TLS verification stays
+  correct — setting `host: <ip>` by hand is what breaks it. A `connect`-time assertion that
+  `socket.remoteAddress` equals the pin is the belt-and-braces that catches a refactor
+  dropping the `lookup`.
+- ⚠️ **Every redirect hop re-screens and re-pins.** The first hop's clearance says nothing
+  about the second's.
+- ⚠️ **A cross-origin hop strips `Authorization`, `Cookie` and `Proxy-Authorization`.**
+  Forwarding a bearer token to whatever host a redirect names is a credential-exfiltration
+  primitive, and it is the default behaviour of every naive implementation.
+- ⚠️ **`::ffff:127.0.0.1`, `64:ff9b::7f00:1`, `2002:7f00:1::` and `http://2130706433/` all
+  reach loopback.** The v6 forms are unwrapped and re-checked as IPv4; the decimal, octal
+  and hex v4 forms are safe only because `url.hostname` is what gets screened, never the raw
+  input (`new URL()` normalizes them). Node normalizes `::ffff:127.0.0.1` to the **hex**
+  form `::ffff:7f00:1`, so the unwrapping has to handle that spelling too.
+- ⚠️ **`url.hostname` keeps the brackets on an IPv6 literal** (`"[::1]"`) and `net.isIP`
+  answers `0` for the bracketed form. Strip them before the literal check or the whole IPv6
+  table is dead code reached by nothing — it fails *closed*, as `dns`, which is exactly why
+  it is easy to miss.
+- ⚠️ **Interpolation is a header-injection vector.** A saved request is authored by a human,
+  but `{{token}}` can carry CRLF straight out of an environment variable. Names and values
+  are validated *after* substitution and before the socket; do not lean on Node's
+  `ERR_INVALID_CHAR` being the security boundary.
+- ⚠️ **A substituted value is never rescanned**, which is what makes `{{a}}` → `{{b}}` inert
+  and closes recursion and expansion bombs in one stroke. The cost — a literal `{{token}}`
+  is unrepresentable, there being no escape syntax — is accepted and documented, not an
+  oversight.
+- ⚠️ **A disabled variable row is dropped *before* the merge**, or it shadows an enabled row
+  of the same name in a lower-precedence scope. Presents as "my variable stopped working
+  when I unticked the other one".
+- ⚠️ **An unresolved `{{name}}` is left in place literally and warns.** Never the empty
+  string: `{{baseUrl}}/users` becoming `/users` is a request against a *different host* that
+  may well succeed. In the URL it self-enforces — `new URL()` fails and the send ends as
+  `invalid-url`, the loud failure exactly where it matters.
+- ⚠️ **The response cap is on *decompressed* bytes.** Sends ask for `identity`; if the
+  target compresses anyway, zlib's `maxOutputLength` plus a byte counter is what makes the
+  cap real. **Overflow is a success, not a failure** — the status line already arrived and
+  is the useful part.
+- ⚠️ **`buf.toString('utf8')` always "succeeds"** (it substitutes U+FFFD), so it cannot be
+  the text-vs-binary test; `TextDecoder('utf-8', { fatal: true })` is. **And that is still
+  not enough — NUL is valid UTF-8**, decodes cleanly, and Postgres then rejects it in a
+  text/jsonb column, turning a good send into a 500 on the history insert. Decoded text
+  containing a NUL byte falls to base64 too, and response *header* values get the same
+  treatment before they land in jsonb.
+- ⚠️ **Node drops a request body on GET/HEAD/DELETE/OPTIONS unless `Content-Length` is
+  set** — `useChunkedEncodingByDefault` is false for those methods, so an unframed body is
+  silently discarded. The transport sets the header itself, which is what makes "send a body
+  on a bodyless method verbatim, and warn" actually true rather than merely intended. Found
+  by a failing test, not by reading.
+- ⚠️ **A failed history insert must not fail the send.** The request already left the
+  building; a 500 here tells the user their send failed when it did not, and invites a retry
+  that fires the upstream call twice.
+- ⚠️ **The environment must be confirmed to belong to the *request's* workspace**, not
+  merely to be visible to the caller — a member of two workspaces could otherwise inject
+  workspace B's variables, and so B's base URL and credentials, into a send from workspace A.
+- ⚠️ **`workspace_members.activeEnvironmentId` is `ON DELETE SET NULL`.** `CASCADE` deletes
+  the *membership row* — a user evicted from a workspace because someone tidied up an
+  environment, with no invite endpoint to repair it. `RESTRICT` would make an environment
+  undeletable while anyone had it selected.
+- ⚠️ **The active-environment `UPDATE` is keyed on `("workspaceId","userId")`, not on a row
+  id.** Copying the `"id" = :id` spelling from the other services rewrites *every* member's
+  preference in the workspace.
+- ⚠️ **Tests override the `SEND_OPTIONS` provider, never `process.env`** — `ConfigModule`
+  reads and validates at decorator-evaluation time, the trap already recorded for
+  `THROTTLER_OPTIONS`. Not theoretical: the e2e fixture listens on `127.0.0.1`, which the
+  real policy blocks. **The screening predicate is itself part of `SendOptions`**, and that
+  is what makes the suite expressible at all: one override allows `127.0.0.1` (the fixture)
+  while blocking `127.0.0.2` (a marker with nothing bound to it), so allowed and blocked
+  addresses coexist in one suite and the redirect test can have hop 1 pass and hop 2 fail.
+- ⚠️ **`request_executions` is a third plaintext-secrets store.** Sent request headers are
+  deliberately *not* stored, which is what keeps the freshly built `Authorization` header
+  out of it entirely; do not "complete" the row with the most secret-laden column in the
+  feature.
+- ⚠️ **`min-h-0` on the editor's new split container** as well as on both of its children,
+  or the whole editor scrolls instead of the panes — and `<main>` already scrolls, so the
+  symptom is a second scrollbar rather than an obvious break.
+- ⚠️ **A `failure` outcome renders no status pill at all.** A `0` or `—` where a status code
+  goes is the exact confusion the two-outcome contract exists to prevent.
+- ⚠️ **The history pane needs its "viewing a past run" banner.** Without it a user clicks a
+  history row, sees a body, and believes their last Send returned it — the same class of bug
+  as the Scripts banner.
+
+### Throttling, revisited
+
+`ThrottlerModule.forRootAsync` now lives in **one** place,
+[throttling.module.ts](backend/src/common/throttling/throttling.module.ts), imported by both
+`AuthModule` and `ExecutionModule`. ⚠️ Registering it twice would give two independent
+storages, and therefore a counter that silently allows double what it says. Four named
+windows are registered together (`burst`, `sustained`, `sendBurst`, `sendSustained`) and
+each route opts out of the pair that is not its own with a per-name `@SkipThrottle`; a skip
+entry for an unregistered name no-ops, which is why the three existing e2e overrides had to
+grow to the four-window shape in the same change — otherwise the suites and production
+configure different universes. `SendThrottlerGuard` keys on `request.user.userId` rather
+than `req.ip`: every caller here is authenticated, and `req.ip` is the *proxy's* address, so
+per-IP would collapse every user into one bucket.
+
+### Retention
+
+Two policies. The per-request cap (`SEND_HISTORY_PER_REQUEST`) is enforced **inside the
+insert's transaction, after the insert, as one set-based statement** — the shape
+`MAX_SESSIONS_PER_USER` already uses. ⚠️ `id` is the tiebreaker in its `ORDER BY` because
+two sends inside one millisecond otherwise make the ordering non-deterministic and the
+delete non-idempotent. The age sweep, `deleteExpiredExecutions()`, is **implemented,
+unit-tested and deliberately uncalled** — a cron hook point, exactly like
+`deleteExpiredSessions()`. `@nestjs/schedule` is still not a dependency and this slice did
+not make it one.
 
 ## Theming
 
@@ -700,11 +842,41 @@ auditable by `yarn contrast`. Both seams are open — a stored preference is a s
 store already knows how to apply, and a custom theme is a `data-theme` value with its
 variables written onto `<html>`.
 
-Deliberately **not** built here, each for a stated reason: sending requests (its own security
-surface — see the README), any environment UI (nothing observable without interpolation),
-drag-and-drop (the `/move` endpoints exist and the kebab menu drives them; dnd is a
-pure-frontend change later), invites and a members pane (no unused UI), and organizations
-(the seam is one nullable column).
+**The Send slice is complete on both sides**, and it closed the two gaps that were paired
+together: the app fires requests, and the environment UI it makes meaningful shipped with
+it. Backend in `backend/src/execution/` — interpolation, the SSRF address policy, the
+`node:http` transport with a pinned socket and manual redirects, `POST /requests/:id/send`,
+`request_executions` with two retention policies, and
+`PUT /workspaces/:id/active-environment`. Frontend: `features/environments/` (picker,
+manager dialog, variable grid), a Send button that sends the **draft**, a response pane
+below a vertical split, and a per-request history pane. Unit specs cover interpolation,
+redaction, the address table, the transport against a real loopback fixture, and the
+throttler wiring; `backend/test/send.e2e-spec.ts` covers the API end to end against an
+`http.createServer` fixture, so nothing in the suite touches the public internet. See
+*Send* above for the traps — every one of them is load-bearing.
+
+The one new dependency is **none**: the transport is `node:http`/`node:https`, chosen partly
+because `undici`'s `Agent` (the other way to pin a connection) is not installed and Node's
+global `fetch` does not expose it. The response pane is a plain `<pre>` with a Pretty/Raw
+toggle — the syntax-highlighting question `BodyTab` deferred *to this slice* was reconsidered
+here and answered the same way.
+
+Deliberately **not** built here, each for a stated reason: **script execution** (the slots
+are stored and never run; a sandbox is the security surface and `node:vm` is not a security
+boundary — its own slice, and `ScriptsTab`'s banner stays until then), a cookie jar
+(per-user shared mutable state with its own tenancy question), streaming/SSE/WebSocket/
+GraphQL/gRPC (every response is buffered to a cap), proxies, client certificates and any
+"disable TLS verification" toggle (the last is the one most likely to be requested and the
+one that turns all the SSRF work into decoration), file uploads (a storage question first),
+server-side cancellation beyond the total timeout, a draggable splitter, and response
+search. Still not built from earlier slices: drag-and-drop (the `/move` endpoints exist and
+the kebab menu drives them; dnd is a pure-frontend change later), invites and a members pane
+(no unused UI), and organizations (the seam is one nullable column).
+
+⚠️ **The active environment is per member, not per device** — deliberately the opposite of
+the theme preference, because an environment selects *which server you are about to hit* and
+that should follow someone between machines. Do not "consistency-fix" either one into the
+other.
 
 Known gap, deliberate and noted in the README: **login and refresh are still unthrottled.** The
 machinery is in place, so it is a `@UseGuards` on each plus a decision about shared or separate

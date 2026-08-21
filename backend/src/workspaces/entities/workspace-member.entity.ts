@@ -11,6 +11,7 @@ import {
   RelationId,
   UpdateDateColumn,
 } from 'typeorm';
+import { EnvironmentEntity } from '../../environments/entities/environment.entity';
 import { UserEntity } from '../../users/entities/user.entity';
 import { WorkspaceEntity } from './workspace.entity';
 
@@ -60,6 +61,30 @@ export class WorkspaceMemberEntity {
    */
   @Column({ type: 'varchar', length: 16 })
   role: WorkspaceRole;
+
+  /**
+   * The environment this member has selected in this workspace.
+   *
+   * A property of the person, not of the workspace — the same kind of field as
+   * `role` above, which is why both are joined onto `Workspace` on the wire.
+   * It is per member rather than per device, deliberately the opposite of the
+   * theme preference: an environment selects *which server you are about to
+   * hit*, and that should follow someone between machines.
+   *
+   * ⚠️ **`SET NULL`, never `CASCADE`.** Cascading here deletes the *membership
+   * row* when an environment is deleted — a user evicted from a workspace
+   * because someone tidied up an environment, with no invite endpoint to
+   * repair it. See the migration.
+   */
+  @ManyToOne(() => EnvironmentEntity, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({
+    name: 'activeEnvironmentId',
+    foreignKeyConstraintName: 'FK_workspace_members_activeEnvironmentId',
+  })
+  activeEnvironment: EnvironmentEntity | null;
+
+  @RelationId((member: WorkspaceMemberEntity) => member.activeEnvironment)
+  activeEnvironmentId: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

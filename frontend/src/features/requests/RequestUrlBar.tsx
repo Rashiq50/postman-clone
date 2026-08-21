@@ -3,30 +3,53 @@ import { Select } from '../../components/ui/Select'
 import { methodStyles } from '../tree/methodStyles'
 
 /**
- * Method + URL + Save.
+ * Method + URL + Send + Save.
  *
- * ⚠️ **There is no Send button, not even a disabled one.** Sending is a
- * separate slice — it carries its own security surface (SSRF, redirect
- * handling, timeouts, response size caps) and nothing here fires a request. A
- * disabled Send reads as broken software; an absent one reads as an unfinished
- * feature, which is the truth. Do not "helpfully" add it.
+ * **Send is the primary action of this bar** and sits to the left of Save,
+ * which stepped down to a secondary style: sending is what a person opens this
+ * app to do, and saving is how they keep what they built.
+ *
+ * What Send does: interpolates `{{variables}}` from the caller's active
+ * environment, resolves the hostname and screens **every** address it answers
+ * with, pins the connection to a screened address, follows redirects manually
+ * (re-screening each hop and stripping credentials across origins), and caps
+ * both the response size and the total time.
+ *
+ * What it deliberately does **not** do: run the pre/post scripts (they are
+ * stored and never executed — see `ScriptsTab`), keep a cookie jar, stream, or
+ * cancel server-side. Those are separate decisions with their own reasons,
+ * recorded in SEND_PLAN.md.
+ *
+ * ⚠️ **Send is not gated on `isDirty`, and it sends the draft.** There is no
+ * autosave, so gating it on a clean draft would make the pane feel broken —
+ * and firing the *last saved* request while the user looks at their edits is
+ * the single most confusing behaviour available here. The server records
+ * `usedDraft` so the history row cannot silently claim something was sent that
+ * was never saved.
  */
 export function RequestUrlBar({
   method,
   url,
   isDirty,
   isSaving,
+  isSending,
   onMethodChange,
   onUrlChange,
   onSave,
+  onSend,
+  onCancelSend,
 }: {
   method: HttpMethod
   url: string
   isDirty: boolean
   isSaving: boolean
+  isSending: boolean
   onMethodChange: (method: HttpMethod) => void
   onUrlChange: (url: string) => void
   onSave: () => void
+  onSend: () => void
+  /** Stops waiting. ⚠️ The upstream call still finishes — see `useSendRequest`. */
+  onCancelSend: () => void
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -60,17 +83,29 @@ export function RequestUrlBar({
         className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 font-mono text-sm text-fg outline-none transition placeholder:text-fg-faint hover:border-fg-faint focus:border-accent"
       />
 
-      {/* The shortcut lives in `title` rather than in the label: a `⌘S` badge
-          inside the button would be wrong on Windows and right on macOS, and
-          the same handler answers to both. `cursor-not-allowed` matters here
-          because the button spends most of its life disabled — a click on a
-          40%-opacity control otherwise gives no feedback at all. */}
+      {/* Enabled whenever there is a URL to send to — nothing else. */}
+      <button
+        type="button"
+        onClick={isSending ? onCancelSend : onSend}
+        disabled={!isSending && url.trim() === ''}
+        title="Send (Ctrl+Enter / ⌘Enter)"
+        className="shrink-0 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {isSending ? 'Cancel' : 'Send'}
+      </button>
+
+      {/* Secondary now that Send owns the accent. The shortcut lives in
+          `title` rather than in the label: a `⌘S` badge inside the button would
+          be wrong on Windows and right on macOS, and the same handler answers
+          to both. `cursor-not-allowed` matters here because the button spends
+          most of its life disabled — a click on a 40%-opacity control
+          otherwise gives no feedback at all. */}
       <button
         type="button"
         onClick={onSave}
         disabled={!isDirty || isSaving}
         title="Save (Ctrl+S / ⌘S)"
-        className="shrink-0 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-40"
+        className="shrink-0 rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-fg-muted transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-40"
       >
         {isSaving ? 'Saving…' : 'Save'}
       </button>

@@ -1,14 +1,31 @@
 /**
- * Environments and their variables.
+ * Environments and their variables — the source of `{{var}}` substitution when
+ * a request is sent.
  *
- * The table, contracts and CRUD exist now so the domain model is complete, but
- * **no environment UI ships in this slice**: without `{{var}}` interpolation
- * (which belongs to the execution slice) an environment editor is a form with
- * no observable effect.
+ * Which environment is *active* is a property of the **member**, not of the
+ * workspace: `workspace_members.activeEnvironmentId`, surfaced on the wire as
+ * `Workspace.activeEnvironmentId`. It follows a person between machines,
+ * deliberately unlike the theme preference, because an environment selects
+ * *which server you are about to hit*.
  *
- * Also deferred: which environment is *active*. It has no consumer until
- * interpolation exists; it becomes a `workspace_members.activeEnvironmentId`
- * column when Send lands.
+ * Resolution rules, which the send path holds to and which every future scope
+ * (collection- or request-level variables) must also hold to:
+ *
+ * - **Enabled rows only**, and disabled rows are dropped *before* the merge.
+ *   Dropping them after would let a disabled row in a higher-precedence scope
+ *   shadow an enabled one below it — the bug that presents as "my variable
+ *   stopped working when I unticked the other one".
+ * - **Later source wins**, and within one source the **last** duplicate key
+ *   wins, matching the visual order of the editor rows.
+ * - **No rescanning.** A substituted value containing `{{x}}` is emitted
+ *   literally and never re-expanded. That closes recursion, expansion bombs
+ *   and variable-injection-through-a-variable in one stroke. The cost is that
+ *   a literal `{{token}}` is unrepresentable; there is no escape syntax, on
+ *   purpose.
+ * - An **empty-string value is a value**, not an absence.
+ * - An **unresolved** `{{name}}` is left in place literally and warns. It is
+ *   never substituted with the empty string — `{{baseUrl}}/users` becoming
+ *   `/users` is a request against a different host that may well succeed.
  */
 
 export const ENVIRONMENT_NAME_MAX_LENGTH = 200;

@@ -113,6 +113,7 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 | `GET` | `/api/v1/workspaces/:id` | — | `Workspace` |
 | `PATCH` | `/api/v1/workspaces/:id` | `{ name? }` | `Workspace` |
 | `DELETE` | `/api/v1/workspaces/:id` | — | 204 (**409** if personal) |
+| `PUT` | `/api/v1/workspaces/:id/active-environment` | `{ environmentId }` | `Workspace` |
 | `GET` | `/api/v1/workspaces/:id/tree` | — | `WorkspaceTree` — **single resource** |
 | `GET` | `/api/v1/workspaces/:id/environments` | — | `Paginated<Environment>` |
 | `POST` | `/api/v1/collections` | `{ workspaceId, name, description? }` | `Collection` (201) |
@@ -131,6 +132,10 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 | `POST` | `/api/v1/environments` | `{ workspaceId, name, variables? }` | `Environment` (201) |
 | `PATCH` | `/api/v1/environments/:id` | partial | `Environment` |
 | `DELETE` | `/api/v1/environments/:id` | — | 204 |
+| `POST` | `/api/v1/requests/:id/send` | `{ environmentId?, draft? }` | `SendResult` (**200**) |
+| `GET` | `/api/v1/requests/:id/executions` | — | `Paginated<RequestExecutionSummary>` |
+| `DELETE` | `/api/v1/requests/:id/executions` | — | 204 |
+| `GET` | `/api/v1/executions/:id` | — | `RequestExecution` |
 | `GET` | `/api/v1/health` | — | `{ status: "ok" }` |
 | `GET` | `/api/v1/ready` | — | `{ status, checks }` (503 if DB down) |
 
@@ -210,20 +215,39 @@ every hand test while leaving a full cross-tenant write unauthorized.
   silently and permanently broken account: registration still returns 201 with a working
   token, `GET /workspaces` is empty, and no endpoint repairs it.
 
-⚠️ **Secrets are stored and returned in plaintext.** `environments.variables` and
-`requests.auth` hold bearer tokens, passwords and API keys unencrypted, and
-`GET /requests/:id` hands them straight back; the `type="password"` inputs in the editor
-are cosmetic. This is what Postman does and an accepted trade-off for this slice, but it
+⚠️ **Secrets are stored and returned in plaintext.** `environments.variables`,
+`requests.auth` and **`request_executions`** hold bearer tokens, passwords and API keys
+unencrypted, and `GET /requests/:id` hands them straight back; the `type="password"`
+inputs in the editor and the environment grid are cosmetic. `request_executions` is the
+third such store and the least obvious: it keeps response bodies (which echo back whatever
+the target reflects) plus the request URL and every redirect hop, redacted only for values
+an environment marked `secret`. Sent request *headers* are deliberately not stored at all,
+which is what keeps the freshly built `Authorization` header out of that table; the
+per-request row cap limits the blast radius without removing it. This is what Postman does and an accepted trade-off for this slice, but it
 is a real gap, not an oversight — the fix is a separate write-only secrets table with
 envelope encryption, and it should land before this is exposed to anyone but its author.
 
-**Sending requests is out of scope here.** There is no execution engine, no `{{var}}`
-interpolation, no response pane and no history — and therefore no Send button, not even a
-disabled one, because a disabled Send reads as broken software while an absent one reads
-as an unfinished feature. Send carries its own security surface (SSRF, redirect handling,
-timeouts, response size caps) and gets its own slice. Everything here saves; nothing fires.
-That is also why the environments table, contracts and CRUD exist with **no environment
-UI**: an environment editor without interpolation is a form with no observable effect.
+**Sending is built.** `POST /requests/:id/send` interpolates `{{var}}` from the caller's
+active environment, screens every resolved address against an SSRF policy, pins the socket
+to a screened address, follows redirects manually (re-screening each hop and stripping
+credentials across origins), caps response size and total time, and records the run in
+`request_executions`. The environment UI landed with it, which is what makes an environment
+editor worth having: it now has an observable effect.
+
+⚠️ **The one rule to know: a failed upstream request is not an API error of ours.**
+`/send` answers **200** whether the target returned 200, returned 500, refused the
+connection, or was blocked before a socket opened. The outcome is a union inside the body,
+discriminated on `outcome` (`'response' | 'failure'`). The error envelope below is reserved
+strictly for *our* failures — a malformed DTO, a request you may not see, a rate limit.
+Collapsing upstream failures into it would make a 500 from the target indistinguishable
+from this API falling over, and would mean the response pane could never show a 4xx body,
+which is most of what a person presses Send to look at.
+
+Still deliberately **not** built: script execution (the two slots are stored and never run
+— a sandbox is the security surface, and `node:vm` is not a security boundary), a cookie
+jar, streaming, proxies, client certificates, and any "disable TLS verification" toggle —
+the last being the one most likely to be asked for and the one that would turn all the SSRF
+work into decoration.
 
 ### Errors
 
@@ -525,8 +549,11 @@ refresh itself fails, `loggedOut()` is dispatched and `RequireAuth` redirects to
   a team's collections with it. It must become `RESTRICT` plus an ownership-transfer
   endpoint — and `workspaces.e2e-spec.ts` cleans up by deleting users, so its teardown
   changes at the same time.
-- **Send** — the execution engine, `{{var}}` interpolation, a response pane, history, and
-  the environment UI that only becomes meaningful alongside them. Budget for the security
-  surface: SSRF, redirect handling, timeouts and response size caps.
+- **Script execution** — the pre-request and post-response slots are stored and never run.
+  The banner in `ScriptsTab` says so and stays until they do. A sandbox is the whole cost
+  here; `node:vm` is not a security boundary.
+- **Login and refresh throttling** — the machinery exists (`ThrottlingModule`, four named
+  windows, per-name `@SkipThrottle`), so it is a `@UseGuards` on each plus a decision about
+  shared or separate budgets.
 - **Encrypting stored secrets** — see the plaintext note under *Domain and tenancy*.
 - Not yet present and not path-dependent: Docker Compose, e2e test database.

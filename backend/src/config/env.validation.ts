@@ -68,6 +68,42 @@ export const envValidationSchema = Joi.object({
   THROTTLE_BURST_LIMIT: Joi.number().integer().min(1).default(5),
   THROTTLE_SUSTAINED_TTL_MS: Joi.number().integer().min(1000).default(3600000),
   THROTTLE_SUSTAINED_LIMIT: Joi.number().integer().min(1).default(20),
+
+  // Rate limiting for `POST /requests/:id/send`, keyed by **user id** rather
+  // than IP: every caller here is authenticated, and `req.ip` is the proxy's
+  // address. Its own budget, because the register windows above are sized for
+  // a signup form and would make Send unusable.
+  SEND_THROTTLE_BURST_TTL_MS: Joi.number().integer().min(1000).default(60000),
+  SEND_THROTTLE_BURST_LIMIT: Joi.number().integer().min(1).default(30),
+  SEND_THROTTLE_SUSTAINED_TTL_MS: Joi.number()
+    .integer()
+    .min(1000)
+    .default(3600000),
+  SEND_THROTTLE_SUSTAINED_LIMIT: Joi.number().integer().min(1).default(600),
+
+  // ⚠️ Turns the SSRF address policy OFF, so a send can reach loopback, RFC1918
+  // and the cloud metadata endpoint. Development only — it exists so a
+  // developer can point the app at their own `localhost` API. DNS resolution
+  // and connection pinning still happen; only the screening step is skipped.
+  // The service logs a warning at boot when this is on, so nobody ships it by
+  // accident.
+  SEND_ALLOW_PRIVATE_NETWORK: Joi.boolean().default(false),
+  SEND_CONNECT_TIMEOUT_MS: Joi.number().integer().min(1).default(5000),
+  // One absolute deadline across every redirect hop. A per-hop timeout under a
+  // 5-hop cap is a 5x timeout; this is also what bounds a slowloris response
+  // body, which a connect timeout does not.
+  SEND_TOTAL_TIMEOUT_MS: Joi.number().integer().min(1).default(30000),
+  SEND_MAX_REDIRECTS: Joi.number().integer().min(0).default(5),
+  // ⚠️ A cap on **decompressed** bytes. We ask for `identity`; if the target
+  // compresses anyway, zlib's `maxOutputLength` is what keeps this real.
+  SEND_MAX_RESPONSE_BYTES: Joi.number().integer().min(1).default(5242880),
+  SEND_MAX_REQUEST_BODY_BYTES: Joi.number().integer().min(1).default(1048576),
+  // Deliberately far lower than the live cap: stored bodies are the growth
+  // driver for `request_executions` (this cap x the per-request cap x every
+  // request in the install).
+  SEND_MAX_STORED_BODY_BYTES: Joi.number().integer().min(1).default(262144),
+  SEND_HISTORY_PER_REQUEST: Joi.number().integer().min(1).default(50),
+  SEND_HISTORY_RETENTION_DAYS: Joi.number().integer().min(1).default(30),
 })
   /**
    * `SameSite=None` without `Secure` is dropped outright by every current

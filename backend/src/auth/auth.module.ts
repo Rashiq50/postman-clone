@@ -8,9 +8,8 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { SessionsModule } from '../sessions/sessions.module';
 import { UsersModule } from '../users/users.module';
 import { OriginCheckGuard } from './origin-check.guard';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { ApiThrottlerGuard } from '../common/throttling/api-throttler.guard';
-import { buildThrottlerOptions } from '../common/throttling/throttler.config';
+import { ThrottlingModule } from '../common/throttling/throttling.module';
 
 @Module({
   imports: [
@@ -25,21 +24,16 @@ import { buildThrottlerOptions } from '../common/throttling/throttler.config';
      */
     SessionsModule,
     /**
-     * Rate limiting, configured here and applied with `@UseGuards` on the one
-     * route that needs it — not as a global `APP_GUARD`. A global throttler
-     * would put every API endpoint on a shared IP budget, which behind a
-     * proxy (see `ApiThrottlerGuard.getTracker`) is one bucket for the whole
-     * user base.
+     * Rate limiting for `POST /auth/register`, applied with `@UseGuards` on
+     * that one route.
      *
-     * Storage is the default in-memory counter, so the limit is **per
-     * process**: two instances behind a load balancer allow twice the
-     * configured rate. A shared store (`@nestjs/throttler-storage-redis`) is
-     * the fix when this runs on more than one node.
+     * ⚠️ The `forRootAsync` registration lives in `ThrottlingModule` and is
+     * only ever performed once — registering it a second time here would give
+     * this module its own independent storage, and therefore a counter that
+     * silently allows double the configured rate. `ExecutionModule` imports the
+     * same module for Send's windows.
      */
-    ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: buildThrottlerOptions,
-    }),
+    ThrottlingModule,
     /**
      * Signing options live here, not at each `sign()` call, so every access
      * token in the app is issued with the same algorithm, lifetime, issuer and

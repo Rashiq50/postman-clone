@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router'
 import { useAppSelector } from '../../app/hooks'
+import { EnvironmentPicker } from '../environments/EnvironmentPicker'
 import { ThemeMenu } from '../theme/ThemeMenu'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 import { useLogoutMutation, useMeQuery } from './authApi'
@@ -46,6 +47,10 @@ export function AppHeader({ wide = false }: { wide?: boolean }) {
         </nav>
 
         <WorkspaceSwitcher />
+
+        {/* Renders nothing outside a workspace route — the preference is per
+            (member, workspace). */}
+        <EnvironmentPicker />
 
         <ThemeMenu />
 

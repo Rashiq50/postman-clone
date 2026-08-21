@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { WorkspaceRole, type Paginated } from '@postman-clone/contracts';
 import { Repository } from 'typeorm';
@@ -22,7 +22,10 @@ import {
  * of the workspace — it is the answer to "what may *you* do here" — but it
  * travels on the wire so the UI can disable buttons without a second request.
  */
-export type WorkspaceWithRole = WorkspaceEntity & { role: WorkspaceRole };
+export type WorkspaceWithRole = WorkspaceEntity & {
+  role: WorkspaceRole;
+  activeEnvironmentId: string | null;
+};
 
 /** Columns of the joined read. Kept in one place so the two readers agree. */
 const WORKSPACE_SELECT = [
@@ -34,6 +37,10 @@ const WORKSPACE_SELECT = [
   'w."createdAt" AS "createdAt"',
   'w."updatedAt" AS "updatedAt"',
   'm."role" AS "role"',
+  // Rides beside `role`, and is the same kind of field: the caller's own
+  // preference, joined from `workspace_members`, not a column on `workspaces`.
+  // Both readers get it for free — this constant exists so they cannot drift.
+  'm."activeEnvironmentId" AS "activeEnvironmentId"',
 ];
 
 @Injectable()
@@ -204,6 +211,56 @@ export class WorkspacesService {
         id,
       );
     }
+  }
+
+  /**
+   * Sets the caller's active environment in a workspace.
+   *
+   * ⚠️ **The `UPDATE` is keyed on `("workspaceId","userId")`, not on a row
+   * id** — an unusual shape for this codebase, and the reason it is spelled
+   * out: copying the `"id" = :id` form from every other service here would
+   * rewrite *every member's* preference in the workspace.
+   */
+  async setActiveEnvironment(
+    userId: string,
+    workspaceId: string,
+    environmentId: string | null,
+  ): Promise<WorkspaceWithRole> {
+    if (environmentId !== null) {
+      // Reached in raw SQL rather than by importing `EnvironmentsModule`. The
+      // precedent is `RequestsService.assertFolderInCollection`: **nothing
+      // imports `WorkspacesModule` and `WorkspacesModule` gains no imports.**
+      const rows: unknown[] = await this.workspaces.manager.query(
+        `SELECT 1 FROM "environments" WHERE "id" = $1 AND "workspaceId" = $2`,
+        [environmentId, workspaceId],
+      );
+      if (rows.length === 0) {
+        throw new NotFoundException(
+          `Environment with id "${environmentId}" not found in this workspace`,
+        );
+      }
+    }
+
+    const result = await this.workspaces.manager.query(
+      `UPDATE "workspace_members" SET "activeEnvironmentId" = $1, "updatedAt" = now()
+       WHERE "workspaceId" = $2 AND "userId" = $3 AND "role" = ANY($4)`,
+      // READ_ROLES: it is the caller's own preference row, and a VIEWER is
+      // entitled to one.
+      [environmentId, workspaceId, userId, [...READ_ROLES]],
+    );
+
+    const affected = Array.isArray(result) ? Number(result[1] ?? 0) : 0;
+    if (!affected) {
+      await explainDenial(
+        this.workspaces.manager,
+        WorkspaceEntity,
+        WORKSPACE_SCOPE,
+        userId,
+        workspaceId,
+      );
+    }
+
+    return this.findOne(userId, workspaceId);
   }
 
   /**

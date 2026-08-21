@@ -30,6 +30,17 @@ export class WorkspaceResponseDto implements Workspace {
   @Expose()
   role: WorkspaceRole;
 
+  /**
+   * The caller's active environment here, joined from the same
+   * `workspace_members` row as `role` — null means "no environment", and
+   * `{{var}}` then resolves to nothing and the send warns.
+   *
+   * The `implements Workspace` clause above is what forces this field to exist:
+   * drop it and the build fails rather than the browser getting a surprise.
+   */
+  @Expose()
+  activeEnvironmentId: string | null;
+
   @Expose()
   @Transform(isoDate)
   createdAt: string;

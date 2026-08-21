@@ -54,8 +54,16 @@ describe('Registration rate limiting (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(THROTTLER_OPTIONS)
+      // Only `burst` is squeezed; the rest stay generous. All four are listed
+      // because the routes skip by name, so the suite and production have to
+      // configure the same universe of windows.
       .useValue({
-        throttlers: [{ name: 'burst', ttl: BURST_TTL_MS, limit: BURST_LIMIT }],
+        throttlers: [
+          { name: 'burst', ttl: BURST_TTL_MS, limit: BURST_LIMIT },
+          { name: 'sustained', ttl: 3600000, limit: 500 },
+          { name: 'sendBurst', ttl: 60000, limit: 500 },
+          { name: 'sendSustained', ttl: 3600000, limit: 500 },
+        ],
       })
       .compile();
 

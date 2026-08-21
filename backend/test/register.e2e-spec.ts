@@ -91,8 +91,18 @@ describe('Registration (e2e)', () => {
       imports: [AppModule],
     })
       .overrideProvider(THROTTLER_OPTIONS)
+      // All four registered windows, not just `burst`. The routes opt out of
+      // the pair that is not theirs with a per-name `@SkipThrottle`, so an
+      // override that omits a window leaves the suite configuring a different
+      // universe from production — and a name the decorator skips but nothing
+      // registers is a silent no-op rather than an error.
       .useValue({
-        throttlers: [{ name: 'burst', ttl: 60000, limit: 500 }],
+        throttlers: [
+          { name: 'burst', ttl: 60000, limit: 500 },
+          { name: 'sustained', ttl: 3600000, limit: 500 },
+          { name: 'sendBurst', ttl: 60000, limit: 500 },
+          { name: 'sendSustained', ttl: 3600000, limit: 500 },
+        ],
       })
       .compile();
 

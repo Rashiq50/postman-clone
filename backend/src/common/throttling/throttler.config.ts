@@ -36,6 +36,38 @@ export function buildThrottlerOptions(config: ConfigService): {
         ttl: config.getOrThrow<number>('THROTTLE_SUSTAINED_TTL_MS'),
         limit: config.getOrThrow<number>('THROTTLE_SUSTAINED_LIMIT'),
       },
+      /**
+       * Send's own budget. The register windows above are sized for a signup
+       * form — 5 a minute — and Send on that budget is unusable, while leaving
+       * Send unthrottled makes an authenticated account a free scanning proxy.
+       *
+       * All four windows are registered in one universe, and each route opts
+       * out of the pair that is not its own with a per-name `@SkipThrottle`.
+       * That is what keeps a single `ThrottlerModule` registration (and so a
+       * single storage) while giving the two routes genuinely separate budgets.
+       */
+      {
+        name: 'sendBurst',
+        ttl: config.getOrThrow<number>('SEND_THROTTLE_BURST_TTL_MS'),
+        limit: config.getOrThrow<number>('SEND_THROTTLE_BURST_LIMIT'),
+      },
+      {
+        name: 'sendSustained',
+        ttl: config.getOrThrow<number>('SEND_THROTTLE_SUSTAINED_TTL_MS'),
+        limit: config.getOrThrow<number>('SEND_THROTTLE_SUSTAINED_LIMIT'),
+      },
     ],
   };
 }
+
+/** Skipped on every route that is not Send. */
+export const SKIP_SEND_THROTTLERS = {
+  sendBurst: true,
+  sendSustained: true,
+} as const;
+
+/** Skipped on Send, which carries its own windows and its own tracker. */
+export const SKIP_DEFAULT_THROTTLERS = {
+  burst: true,
+  sustained: true,
+} as const;

@@ -133,6 +133,9 @@ const PAIRS = [
   ['danger on canvas', '--danger', '--canvas', 4.5],
   ['danger-soft-fg on danger-soft', '--danger-soft-fg', '--danger-soft', 4.5],
   ['success-soft-fg on success-soft', '--success-soft-fg', '--success-soft', 4.5],
+  // ⚠️ A pair not listed here is unchecked, not passing. `info` is the 3xx
+  // status pill, added with Send.
+  ['info-soft-fg on info-soft', '--info-soft-fg', '--info-soft', 4.5],
   ['warning-soft-fg on warning-soft', '--warning-soft-fg', '--warning-soft', 4.5],
   ['method-get on surface', '--method-get', '--surface', 4.5],
   ['method-post on surface', '--method-post', '--surface', 4.5],

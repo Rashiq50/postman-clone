@@ -3,14 +3,18 @@ import type { RequestScripts } from '@postman-clone/contracts'
 /**
  * The pre-request and post-response script slots: two plain `<textarea>`s.
  *
- * No editor library and no syntax highlighting, matching `BodyTab` — that is a
- * dependency, bundle-size and theming decision that belongs with the execution
- * slice, which is also the first point at which highlighting earns anything.
+ * No editor library and no syntax highlighting, matching `BodyTab` and the
+ * response pane — the execution slice reconsidered that dependency question
+ * and answered it the same way.
  *
- * ⚠️ **Nothing runs these.** The banner below is not decoration: a code editor
- * that silently does nothing is a worse bug than a missing feature, because the
- * user writes a script, saves it, sends the request and concludes the app is
- * broken. Delete the banner in the same change that lands execution, not before.
+ * ⚠️ **Nothing runs these, and sending exists now.** The banner below is not
+ * decoration and it is *more* necessary than it was, not less: a code editor
+ * that silently does nothing is a worse bug than a missing feature, and now
+ * that Send works a user can write a script, save it, press Send, watch a real
+ * response come back, and reasonably conclude the script ran. **Keep the banner
+ * until scripts actually execute** — the instruction here used to say to delete
+ * it when execution landed, which was wrong: a sandbox is the security surface,
+ * and `node:vm` is not a security boundary. That is its own slice.
  *
  * Both slots are always sent together — `RequestScripts` has no optional
  * fields, so a patch spreads the current pair rather than sending one key.
@@ -25,7 +29,8 @@ export function ScriptsTab({
   return (
     <div className="space-y-4">
       <p className="rounded-md bg-warning-soft px-3 py-2 text-sm text-warning-soft-fg">
-        Scripts are saved but not executed yet — sending requests is not built.
+        Scripts are saved but never executed. Sending a request ignores both
+        slots.
       </p>
 
       <label className="block space-y-1.5">

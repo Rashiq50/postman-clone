@@ -44,8 +44,20 @@ export interface Workspace {
    * do without a second request.
    */
   role: WorkspaceRole;
+  /**
+   * The **caller's** active environment in this workspace, from their
+   * `workspace_members` row — not a property of the workspace, exactly like
+   * `role` above. Null means "no environment"; `{{var}}` then resolves to
+   * nothing and the send warns.
+   */
+  activeEnvironmentId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Body of `PUT /workspaces/:id/active-environment`. */
+export interface SetActiveEnvironmentInput {
+  environmentId: string | null;
 }
 
 export interface CreateWorkspaceInput {

@@ -1,12 +1,17 @@
 import { WorkspaceRole } from '@postman-clone/contracts';
 import {
   ADMIN_ROLES,
+  COLLECTION_SCOPE,
   OWNER_ROLES,
   READ_ROLES,
+  REQUEST_EXECUTION_SCOPE,
+  REQUEST_SCOPE,
   SCOPED_COLLECTION_IDS,
   SCOPED_WORKSPACE_IDS,
+  WORKSPACE_SCOPE,
   WRITE_ROLES,
   scopeParams,
+  scopedWhere,
 } from './workspace-scope';
 
 const FRAGMENTS = {
@@ -77,5 +82,50 @@ describe('scopeParams', () => {
       roles: ['OWNER', 'ADMIN', 'EDITOR'],
     });
     expect(Array.isArray(params.roles)).toBe(true);
+  });
+});
+
+describe('scopedWhere', () => {
+  it.each([
+    [COLLECTION_SCOPE, '"workspaceId" IN'],
+    [REQUEST_SCOPE, '"collectionId" IN'],
+    [WORKSPACE_SCOPE, '"id" IN'],
+    [REQUEST_EXECUTION_SCOPE, '"requestId" IN'],
+  ])('keys $resourceName on %s', (scope, column) => {
+    expect(scopedWhere(scope)).toContain(column);
+  });
+
+  it('prefixes with the alias when one is given, and omits it when not', () => {
+    // ⚠️ TypeORM emits UPDATE/DELETE without a table alias, so a prefixed
+    // column name is a syntax error there.
+    expect(scopedWhere(REQUEST_SCOPE, 'r')).toContain('r."collectionId"');
+    expect(scopedWhere(REQUEST_SCOPE)).toContain('"collectionId" IN');
+    expect(scopedWhere(REQUEST_SCOPE)).not.toContain('r."collectionId"');
+  });
+
+  it('reaches membership for an execution through its request, with no denormalized workspaceId', () => {
+    // A `request_executions.workspaceId` column would be a second copy of the
+    // tenancy fact, free to drift from the collection the request lives in.
+    const fragment = scopedWhere(REQUEST_EXECUTION_SCOPE, 'e');
+
+    expect(fragment).toContain('e."requestId" IN');
+    expect(fragment).toContain('FROM "requests" r');
+    expect(fragment).toContain(SCOPED_COLLECTION_IDS.trim());
+    expect(fragment).not.toContain('e."workspaceId"');
+  });
+
+  it('binds roles as a parameter in every scope, including the new one', () => {
+    for (const scope of [
+      COLLECTION_SCOPE,
+      REQUEST_SCOPE,
+      WORKSPACE_SCOPE,
+      REQUEST_EXECUTION_SCOPE,
+    ]) {
+      const fragment = scopedWhere(scope, 't');
+      expect(fragment).toContain('= ANY(:roles)');
+      for (const role of Object.values(WorkspaceRole)) {
+        expect(fragment).not.toContain(`'${role}'`);
+      }
+    }
   });
 });

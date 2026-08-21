@@ -99,8 +99,9 @@ export function scopeParams(
  * `collection` — via its own `collectionId` (folders, requests).
  * `workspace`  — via its own `workspaceId` (collections, environments).
  * `self`       — the row *is* the workspace.
+ * `request`    — via its own `requestId` (executions), one join further out.
  */
-export type ScopeVia = 'collection' | 'workspace' | 'self';
+export type ScopeVia = 'collection' | 'workspace' | 'self' | 'request';
 
 export interface ScopedResource {
   /** Only used in error messages; the query builder supplies the real table. */
@@ -128,6 +129,20 @@ export const WORKSPACE_SCOPE: ScopedResource = {
   resourceName: 'Workspace',
   via: 'self',
 };
+/**
+ * Recorded sends reach membership through their request, one join further out
+ * than anything else here.
+ *
+ * Preferred over denormalizing a `workspaceId` column onto the row: that would
+ * be a second copy of the tenancy fact, free to drift from the collection the
+ * request actually lives in, and it would quietly falsify the rule this file
+ * exists to state — that authorization lives in *one* fragment used by both the
+ * hot path and `explainDenial`.
+ */
+export const REQUEST_EXECUTION_SCOPE: ScopedResource = {
+  resourceName: 'Execution',
+  via: 'request',
+};
 
 /**
  * The membership predicate for a resource, as a SQL string.
@@ -149,5 +164,9 @@ export function scopedWhere(scope: ScopedResource, alias = ''): string {
       return `${prefix}"workspaceId" IN (${SCOPED_WORKSPACE_IDS})`;
     case 'self':
       return `${prefix}"id" IN (${SCOPED_WORKSPACE_IDS})`;
+    case 'request':
+      return `${prefix}"requestId" IN (
+        SELECT r."id" FROM "requests" r WHERE r."collectionId" IN (${SCOPED_COLLECTION_IDS})
+      )`;
   }
 }

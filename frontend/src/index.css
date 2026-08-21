@@ -75,6 +75,8 @@
   /* Status badges */
   --color-success-soft: var(--success-soft);
   --color-success-soft-fg: var(--success-soft-fg);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-fg: var(--info-soft-fg);
   --color-warning-soft: var(--warning-soft);
   --color-warning-soft-fg: var(--warning-soft-fg);
 
@@ -136,6 +138,11 @@
   --success-soft-fg: #065f46;
   --warning-soft: #fef3c7;
   --warning-soft-fg: #92400e;
+  /* 3xx. The only new family Send needed, and only the *soft* pair:
+     nothing here is a filled info button, and an unused solid token is
+     one more thing to retune in five places. */
+  --info-soft: #dbeafe;
+  --info-soft-fg: #1e40af;
 
   --method-get: #047857;
   --method-post: #b45309;
@@ -214,6 +221,10 @@
   --success-soft-fg: #6ee7b7;
   --warning-soft: rgb(245 158 11 / 0.16);
   --warning-soft-fg: #fcd34d;
+  /* Translucent like its siblings here, so it tints the surface it lands
+     on rather than painting a flat slab over it. */
+  --info-soft: rgb(96 165 250 / 0.16);
+  --info-soft-fg: #93c5fd;
 
   --method-get: #34d399;
   --method-post: #fbbf24;
@@ -267,6 +278,8 @@
   --success-soft-fg: #86efac;
   --warning-soft: rgb(250 204 21 / 0.16);
   --warning-soft-fg: #fde047;
+  --info-soft: rgb(56 189 248 / 0.16);
+  --info-soft-fg: #7dd3fc;
 
   --method-get: #4ade80;
   --method-post: #fbbf24;
@@ -349,6 +362,8 @@
   --success-soft-fg: #86efac;
   --warning-soft: rgb(250 204 21 / 0.16);
   --warning-soft-fg: #fde047;
+  --info-soft: rgb(56 189 248 / 0.16);
+  --info-soft-fg: #7dd3fc;
 
   --method-get: #4ade80;
   --method-post: #fbbf24;
@@ -403,6 +418,8 @@
   --success-soft-fg: #2f5d2a;
   --warning-soft: #f8ebc8;
   --warning-soft-fg: #7c5a11;
+  --info-soft: #d8e3ef;
+  --info-soft-fg: #2a4d6d;
 
   --method-get: #2f6b46;
   --method-post: #a15c07;

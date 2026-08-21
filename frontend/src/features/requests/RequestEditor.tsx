@@ -1,4 +1,8 @@
-import type { KeyValueEntry } from '@postman-clone/contracts'
+import type {
+  KeyValueEntry,
+  RequestExecution,
+  SendResult,
+} from '@postman-clone/contracts'
 import * as Tabs from '@radix-ui/react-tabs'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -10,9 +14,12 @@ import { AuthTab } from './AuthTab'
 import { BodyTab } from './BodyTab'
 import { KeyValueEditor } from './KeyValueEditor'
 import { RequestUrlBar } from './RequestUrlBar'
+import { ResponsePane, type ResponseView } from './ResponsePane'
 import { ScriptsTab } from './ScriptsTab'
+import { useGetExecutionQuery } from './executionsApi'
 import { useGetRequestQuery, useUpdateRequestMutation } from './requestsApi'
 import { useRequestDraft } from './useRequestDraft'
+import { useSendRequest } from './useSendRequest'
 
 const TABS = ['Params', 'Headers', 'Body', 'Auth', 'Scripts'] as const
 type Tab = (typeof TABS)[number]
@@ -54,6 +61,70 @@ function FilledDot({ label }: { label: string }) {
   )
 }
 
+/**
+ * Flattens a live `SendResult` or a stored `RequestExecution` into the one
+ * shape the response pane renders.
+ *
+ * ⚠️ This function is why there is exactly **one** renderer for a fresh send
+ * and a past run. Letting the pane branch on which it got would mean two
+ * renderers for one concept, which is the same thing the two-outcome contract
+ * exists to prevent one level down.
+ */
+function toResponseView(
+  source: SendResult | RequestExecution | undefined,
+): ResponseView | null {
+  if (!source) return null
+
+  // A `SendResult` nests its outcome; a stored row flattens it into columns.
+  const isLive = 'result' in source
+  const outcome = isLive ? source.result.outcome : source.outcome
+  const live = isLive ? source.result : null
+
+  return {
+    outcome,
+    status: live
+      ? live.outcome === 'response'
+        ? live.status
+        : null
+      : (source as RequestExecution).status,
+    statusText: live
+      ? live.outcome === 'response'
+        ? live.statusText
+        : null
+      : (source as RequestExecution).statusText,
+    failureKind: live
+      ? live.outcome === 'failure'
+        ? live.kind
+        : null
+      : (source as RequestExecution).failureKind,
+    failureMessage: live
+      ? live.outcome === 'failure'
+        ? live.message
+        : null
+      : (source as RequestExecution).failureMessage,
+    headers:
+      live?.outcome === 'response'
+        ? live.headers
+        : ((source as RequestExecution).headers ?? []),
+    body:
+      live?.outcome === 'response'
+        ? live.body
+        : ((source as RequestExecution).body ?? { encoding: 'empty' }),
+    bodyBytes:
+      live?.outcome === 'response'
+        ? live.bodyBytes
+        : ((source as RequestExecution).bodyBytes ?? null),
+    bodyTruncated:
+      live?.outcome === 'response'
+        ? live.bodyTruncated
+        : ((source as RequestExecution).bodyTruncated ?? false),
+    redirects: source.redirects,
+    warnings: source.warnings,
+    timing: source.timing,
+    url: source.url,
+  }
+}
+
 export function RequestEditor() {
   const { workspaceId, requestId } = useParams<{
     workspaceId: string
@@ -84,6 +155,33 @@ export function RequestEditor() {
   useEffect(() => setTab('Params'), [requestId])
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  const {
+    run: send,
+    cancel: cancelSend,
+    reset: resetSend,
+    result,
+    error: sendError,
+    isSending,
+  } = useSendRequest(requestId)
+
+  // Collapsed until the first send: an empty pane taking 45% of the editor
+  // before anyone has pressed Send is dead space on every request opened.
+  const [responseCollapsed, setResponseCollapsed] = useState(true)
+
+  /** Non-null while the pane shows a stored run instead of the last send. */
+  const [historyId, setHistoryId] = useState<string | null>(null)
+  const { data: pastRun } = useGetExecutionQuery(historyId!, {
+    skip: !historyId,
+  })
+
+  // ⚠️ Keyed on `requestId`, like every other reset in this pane: the previous
+  // request's response must not linger under the next request's URL.
+  useEffect(() => {
+    resetSend()
+    setHistoryId(null)
+    setResponseCollapsed(true)
+  }, [requestId, resetSend])
+
   const save = async () => {
     if (!requestId || !workspaceId || !isDirty) return
     setSaveError(null)
@@ -104,13 +202,37 @@ export function RequestEditor() {
     }
   }
 
-  // Ctrl/Cmd+S. Bound on the window rather than the form so it works wherever
-  // focus happens to be in the pane.
+  /**
+   * Sends the **draft**, not the saved row — see `RequestUrlBar`. The draft is
+   * passed whether or not it is dirty; the server compares nothing and simply
+   * records `usedDraft` when a draft was supplied, so this keeps "what you see
+   * is what was sent" true without a second source of truth for dirtiness.
+   */
+  const runSend = () => {
+    if (!draft) return
+    setHistoryId(null)
+    setResponseCollapsed(false)
+    void send({
+      method: draft.method,
+      url: draft.url,
+      headers: draft.headers,
+      queryParams: draft.queryParams,
+      body: draft.body,
+      auth: draft.auth,
+    })
+  }
+
+  // Ctrl/Cmd+S to save, Ctrl/Cmd+Enter to send. Bound on the window rather than
+  // the form so both work wherever focus happens to be in the pane.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         void save()
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault()
+        runSend()
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -263,9 +385,12 @@ export function RequestEditor() {
           url={draft.url}
           isDirty={isDirty}
           isSaving={isSaving}
+          isSending={isSending}
           onMethodChange={(method) => patch({ method })}
           onUrlChange={(url) => patch({ url })}
           onSave={() => void save()}
+          onSend={runSend}
+          onCancelSend={cancelSend}
         />
 
         {saveError && (
@@ -289,6 +414,15 @@ export function RequestEditor() {
         it is on the workbench grid: without it the panel sizes to its content
         and the whole editor scrolls instead of the panel.
       */}
+      {/*
+        ⚠️ **`min-h-0` on this split container as well as on both of its
+        children.** A flex child defaults to `min-height: auto`, so a single
+        missing `min-h-0` anywhere in this chain makes the panes size to their
+        content and the whole editor scroll instead. `WorkbenchShell`'s
+        `<main>` already scrolls, so the symptom is a second scrollbar rather
+        than an obviously broken layout — subtle enough to ship.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col">
       <Tabs.Root
         value={tab}
         onValueChange={(next) => setTab(next as Tab)}
@@ -355,6 +489,22 @@ export function RequestEditor() {
           </div>
         </div>
       </Tabs.Root>
+
+      <ResponsePane
+        view={toResponseView(historyId ? pastRun : (result ?? undefined))}
+        requestId={request.id}
+        isSending={isSending}
+        error={sendError}
+        collapsed={responseCollapsed}
+        onToggleCollapsed={() => setResponseCollapsed((open) => !open)}
+        historyView={historyId ? { id: historyId } : null}
+        onSelectHistory={(id) => {
+          setHistoryId(id)
+          setResponseCollapsed(false)
+        }}
+        onClearHistoryView={() => setHistoryId(null)}
+      />
+      </div>
     </div>
   )
 }

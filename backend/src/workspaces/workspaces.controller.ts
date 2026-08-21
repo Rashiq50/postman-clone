@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { API_VERSION, type Paginated } from '@postman-clone/contracts';
@@ -16,6 +17,7 @@ import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
+import { SetActiveEnvironmentDto } from './dto/set-active-environment.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { WorkspaceResponseDto } from './dto/workspace-response.dto';
 import { WorkspacesService } from './workspaces.service';
@@ -71,6 +73,28 @@ export class WorkspacesController {
   }
 
   /** 409 when it is the caller's personal workspace — see the service. */
+  /**
+   * The caller's own active-environment preference for this workspace.
+   *
+   * `PUT` because it is a total assignment of a single-valued setting in which
+   * `null` is a value, not an omission. It returns the whole workspace so the
+   * client can patch one cache entry rather than refetch the list.
+   */
+  @Put(':id/active-environment')
+  async setActiveEnvironment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetActiveEnvironmentDto,
+  ): Promise<WorkspaceResponseDto> {
+    return WorkspaceResponseDto.from(
+      await this.workspacesService.setActiveEnvironment(
+        user.userId,
+        id,
+        dto.environmentId,
+      ),
+    );
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(

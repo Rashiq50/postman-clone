@@ -26,7 +26,9 @@ import {
   setRefreshCookie,
 } from './refresh-cookie';
 import { RegisterDto } from './dto/register-dto';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ApiThrottlerGuard } from '../common/throttling/api-throttler.guard';
+import { SKIP_SEND_THROTTLERS } from '../common/throttling/throttler.config';
 
 /**
  * `@Res({ passthrough: true })` on every handler that touches a cookie is
@@ -90,6 +92,10 @@ export class AuthController {
    * hashes, each of which is deliberately expensive.
    */
   @Public()
+  // ⚠️ All four windows are registered in one throttler universe, so this route
+  // must opt out of Send's pair by name or a signup would also spend a send
+  // budget. A skip entry for a window that is not registered simply no-ops.
+  @SkipThrottle(SKIP_SEND_THROTTLERS)
   @UseGuards(ApiThrottlerGuard, OriginCheckGuard)
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
