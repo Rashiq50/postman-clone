@@ -78,7 +78,6 @@ export function AppHeader() {
             setting — and it is changed far more often than anything under a
             user's own name should be buried. */}
         <ThemeButton />
-
         <UserMenu />
       </div>
     </header>

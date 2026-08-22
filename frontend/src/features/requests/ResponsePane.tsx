@@ -385,6 +385,8 @@ export function ResponsePane({
           <span>Response</span>
         </button>
 
+        <div className="flex-1" />
+
         {isSending && <span className="text-xs text-fg-subtle">Sending…</span>}
 
         {!isSending && view && (

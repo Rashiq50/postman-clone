@@ -169,7 +169,7 @@ export function Menu({
 
 /** The shared row styling, so the two menus in the header cannot diverge. */
 export const MENU_ITEM =
-  'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition focus:outline-none text-fg-muted hover:bg-surface-muted focus-visible:bg-surface-muted'
+  'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition focus:outline-none text-fg-muted hover:bg-surface-muted focus-visible:bg-surface-muted cursor-pointer'
 
 /** The tick column. Rendered transparent rather than absent, so the labels of
  *  checked and unchecked rows line up. */

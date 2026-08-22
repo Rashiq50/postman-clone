@@ -1,8 +1,8 @@
-import { useNavigate } from 'react-router'
-import { MENU_ITEM, Menu } from '../../components/ui/Menu'
-import { useAppSelector } from '../../app/hooks'
-import { useLogoutMutation } from './authApi'
-import { selectCurrentUser } from './authSlice'
+import { useNavigate } from "react-router";
+import { MENU_ITEM, Menu } from "../../components/ui/Menu";
+import { useAppSelector } from "../../app/hooks";
+import { useLogoutMutation } from "./authApi";
+import { selectCurrentUser } from "./authSlice";
 
 /**
  * The header's account menu: who you are, where your account settings are, and
@@ -28,17 +28,17 @@ function Initials({ name }: { name: string }) {
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 
   return (
     <span
       aria-hidden
       className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-semibold text-accent-soft-fg"
     >
-      {initials || '?'}
+      {initials || "?"}
     </span>
-  )
+  );
 }
 
 function ChevronDown() {
@@ -56,23 +56,20 @@ function ChevronDown() {
     >
       <path d="m4 6.25 4 4 4-4" />
     </svg>
-  )
+  );
 }
 
 export function UserMenu() {
-  const user = useAppSelector(selectCurrentUser)
-  const [logout, { isLoading: isSigningOut }] = useLogoutMutation()
-  const navigate = useNavigate()
+  const user = useAppSelector(selectCurrentUser);
+  const [logout, { isLoading: isSigningOut }] = useLogoutMutation();
+  const navigate = useNavigate();
 
   return (
     <Menu
       label="Account"
       trigger={
         <>
-          <Initials name={user?.name ?? ''} />
-          <span className="hidden max-w-32 truncate sm:inline">
-            {user?.name ?? 'Account'}
-          </span>
+          <Initials name={user?.name ?? ""} />
           <ChevronDown />
         </>
       }
@@ -91,8 +88,8 @@ export function UserMenu() {
               type="button"
               role="menuitem"
               onClick={() => {
-                close(false)
-                void navigate('/profile')
+                close(false);
+                void navigate("/profile");
               }}
               className={MENU_ITEM}
             >
@@ -108,16 +105,17 @@ export function UserMenu() {
               role="menuitem"
               disabled={isSigningOut}
               onClick={() => {
-                close(false)
-                void logout()
+                close(false);
+                void logout();
               }}
-              className={`${MENU_ITEM} text-danger hover:bg-danger-soft focus-visible:bg-danger-soft disabled:opacity-50`}
+              className={`${MENU_ITEM} hover:bg-danger-soft focus-visible:bg-danger-soft disabled:opacity-50`}
+              style={{ color: "red" }}
             >
-              {isSigningOut ? 'Signing out…' : 'Sign out'}
+              {isSigningOut ? "Signing out…" : "Sign out"}
             </button>
           </div>
         </>
       )}
     </Menu>
-  )
+  );
 }
