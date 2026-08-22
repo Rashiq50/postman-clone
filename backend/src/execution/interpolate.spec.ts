@@ -264,6 +264,91 @@ describe('interpolateRequest', () => {
     });
   });
 
+  it('interpolates an xml body like a raw one', () => {
+    const { resolved } = interpolateRequest(
+      baseRequest({ body: { mode: 'xml', text: '<at>{{baseUrl}}</at>' } }),
+      vars,
+    );
+
+    expect(resolved.body).toEqual({
+      mode: 'xml',
+      text: '<at>https://api.example.test</at>',
+    });
+  });
+
+  it('interpolates both halves of a graphql body', () => {
+    const { resolved } = interpolateRequest(
+      baseRequest({
+        body: {
+          mode: 'graphql',
+          query: 'query { at(url: "{{baseUrl}}") }',
+          variables: '{"t": "{{token}}"}',
+        },
+      }),
+      vars,
+    );
+
+    expect(resolved.body).toEqual({
+      mode: 'graphql',
+      query: 'query { at(url: "https://api.example.test") }',
+      variables: '{"t": "s3cr3t"}',
+    });
+  });
+
+  it('interpolates form-data text rows but never a file row', () => {
+    // ⚠️ A file row's `value` is a path on the author's machine, not content.
+    // Substituting into it would produce a different path that is just as
+    // unreadable — and this body is not sent at all.
+    const { resolved } = interpolateRequest(
+      baseRequest({
+        body: {
+          mode: 'form-data',
+          entries: [
+            { key: 'k', value: '{{token}}', enabled: true, type: 'text' },
+            { key: 'f', value: '{{token}}.png', enabled: true, type: 'file' },
+            { key: 'off', value: 'x', enabled: false, type: 'text' },
+          ],
+        },
+      }),
+      vars,
+    );
+
+    expect(resolved.body).toEqual({
+      mode: 'form-data',
+      entries: [
+        { key: 'k', value: 's3cr3t', enabled: true, type: 'text' },
+        { key: 'f', value: '{{token}}.png', enabled: true, type: 'file' },
+      ],
+    });
+  });
+
+  it('leaves a binary body untouched — a path has nothing to substitute', () => {
+    const { resolved } = interpolateRequest(
+      baseRequest({ body: { mode: 'binary', src: '{{token}}.bin' } }),
+      vars,
+    );
+
+    expect(resolved.body).toEqual({ mode: 'binary', src: '{{token}}.bin' });
+  });
+
+  it('passes an imported unsupported auth through uninterpolated', () => {
+    // Nothing is ever sent from these params, so resolving a secret into them
+    // would only widen what has to be redacted. The warning is raised where
+    // the auth is applied, in execution.service.
+    const auth = {
+      type: 'unsupported' as const,
+      scheme: 'oauth2' as const,
+      params: [{ key: 'accessToken', value: '{{token}}', enabled: true }],
+    };
+    const { resolved, warnings } = interpolateRequest(
+      baseRequest({ auth }),
+      vars,
+    );
+
+    expect(resolved.auth).toEqual(auth);
+    expect(warnings).toEqual([]);
+  });
+
   it('leaves a none body alone', () => {
     const { resolved } = interpolateRequest(
       baseRequest({ body: { mode: 'none' } }),

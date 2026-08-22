@@ -15,6 +15,7 @@ import { CollectionsModule } from './collections/collections.module';
 import { RequestsModule } from './requests/requests.module';
 import { EnvironmentsModule } from './environments/environments.module';
 import { ExecutionModule } from './execution/execution.module';
+import { ImportModule } from './import/import.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ExecutionModule } from './execution/execution.module';
     RequestsModule,
     EnvironmentsModule,
     ExecutionModule,
+    ImportModule,
   ],
 })
 export class AppModule {}

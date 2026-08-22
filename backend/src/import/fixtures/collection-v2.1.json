@@ -1,0 +1,230 @@
+{
+  "info": {
+    "_postman_id": "3f2a1b40-0000-4000-8000-000000000000",
+    "name": "Raven Import Fixture",
+    "description": { "content": "A collection exercising every mapping rule.", "type": "text/markdown" },
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{collectionToken}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": { "type": "text/javascript", "exec": ["pm.environment.set('t', Date.now())"] }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.example.com" },
+    { "key": "retired", "value": "old", "disabled": true },
+    { "key": "port", "value": 8080 }
+  ],
+  "item": [
+    {
+      "name": "Ping",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/ping?verbose=true&trace=off",
+          "host": ["{{baseUrl}}"],
+          "path": ["ping"],
+          "query": [
+            { "key": "verbose", "value": "true" },
+            { "key": "trace", "value": "off", "disabled": true }
+          ]
+        },
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "X-Debug", "value": "1", "disabled": true }
+        ]
+      },
+      "response": [
+        { "name": "200 OK", "code": 200, "body": "{}" },
+        { "name": "404", "code": 404, "body": "{}" }
+      ]
+    },
+    {
+      "name": "Auth",
+      "auth": { "type": "basic", "basic": [{ "key": "username", "value": "folder" }] },
+      "variable": [
+        { "key": "scope", "value": "auth" },
+        { "key": "baseUrl", "value": "https://folder.example.com" }
+      ],
+      "event": [
+        { "listen": "test", "script": { "exec": ["pm.test('folder', function () {})"] } }
+      ],
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": ["pm.variables.set('a', 1)"] } },
+            { "listen": "prerequest", "script": { "exec": ["console.log('second')"] } },
+            { "listen": "test", "script": { "exec": ["pm.test('ok', function () {", "  pm.response.to.have.status(200)", "})"] } }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "url": { "raw": "{{baseUrl}}/login" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"a@b.c\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "oauth2",
+              "oauth2": [
+                { "key": "accessToken", "value": "abc123" },
+                { "key": "tokenType", "value": "bearer" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/refresh" }
+          }
+        },
+        {
+          "name": "Nested",
+          "item": [
+            {
+              "name": "Deep request",
+              "request": {
+                "method": "DELETE",
+                "url": { "raw": "{{baseUrl}}/users/:id", "variable": [{ "key": "id", "value": "42" }] },
+                "auth": {
+                  "type": "apikey",
+                  "apikey": [
+                    { "key": "key", "value": "X-Api-Key" },
+                    { "key": "value", "value": "{{apiKey}}" },
+                    { "key": "in", "value": "query" }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bodies",
+      "item": [
+        {
+          "name": "XML body",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/soap" },
+            "body": { "mode": "raw", "raw": "<a>1</a>", "options": { "raw": { "language": "xml" } } }
+          }
+        },
+        {
+          "name": "Plain raw body",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/text" },
+            "body": { "mode": "raw", "raw": "hello" }
+          }
+        },
+        {
+          "name": "Urlencoded body",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/form" },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "a", "value": "1" },
+                { "key": "b", "value": "2", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Form-data body",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/upload" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "caption", "value": "hi", "type": "text" },
+                { "key": "avatar", "type": "file", "src": "/Users/someone/avatar.png" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GraphQL body",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/graphql" },
+            "body": {
+              "mode": "graphql",
+              "graphql": { "query": "query Q($id: ID!) { user(id: $id) { name } }", "variables": "{\"id\": \"1\"}" }
+            }
+          }
+        },
+        {
+          "name": "Binary body",
+          "request": {
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/blob" },
+            "body": { "mode": "file", "file": { "src": "/Users/someone/data.bin" } }
+          }
+        },
+        {
+          "name": "Disabled body",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/nothing" },
+            "body": { "mode": "raw", "raw": "ignored", "disabled": true }
+          }
+        },
+        {
+          "name": "Unknown body mode",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/mystery" },
+            "body": { "mode": "protobuf", "protobuf": {} }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Edge cases",
+      "item": [
+        {
+          "name": "",
+          "request": { "method": "PROPFIND", "url": { "raw": "{{baseUrl}}/weird" } }
+        },
+        {
+          "name": "Unknown auth scheme",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/mystery-auth" },
+            "auth": { "type": "quantum", "quantum": [{ "key": "spin", "value": "up" }] }
+          }
+        },
+        {
+          "name": "Assembled URL",
+          "request": {
+            "method": "GET",
+            "url": {
+              "protocol": "https",
+              "host": ["api", "example", "com"],
+              "port": "8443",
+              "path": ["v1", "things"],
+              "query": [
+                { "key": "page", "value": "2" },
+                { "key": "hidden", "value": "yes", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

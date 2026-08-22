@@ -153,6 +153,8 @@ breaking change ships as `v2` next to `v1` instead of mutating an endpoint clien
 | `GET` | `/api/v1/requests/:id/executions` | — | `Paginated<RequestExecutionSummary>` |
 | `DELETE` | `/api/v1/requests/:id/executions` | — | 204 |
 | `GET` | `/api/v1/executions/:id` | — | `RequestExecution` |
+| `POST` | `/api/v1/import/collection` | `{ workspaceId, data }` | `ImportCollectionResult` (201) |
+| `POST` | `/api/v1/import/environment` | `{ workspaceId, data }` | `ImportEnvironmentResult` (201) |
 | `GET` | `/api/v1/health` | — | `{ status: "ok" }` |
 | `GET` | `/api/v1/ready` | — | `{ status, checks }` (503 if DB down) |
 
@@ -185,6 +187,22 @@ editor fetches the full row from `GET /requests/:id`.
 | `GET /api/v1/ready` | Readiness — can serve traffic (DB reachable) | `200 { "status": "ok", "checks": { "database": "up" } }` | `503 { "status": "error", "checks": { "database": "down" } }` |
 
 Wire Kubernetes (or similar) liveness to `/health` and readiness to `/ready`.
+
+**The two import routes answer `201` with `warnings[]`, never an error envelope for a
+lossy import.** `data` is the raw Postman document, opaque on the wire and validated by one
+custom constraint. A collection whose folder-level auth was dropped and whose one unknown
+verb became `GET` was still imported, and the user needs the 900 requests that arrived far
+more than a `400`. This is the same call `/send` makes about an upstream 500 — *partial
+results are data* — and it is why import added **no new `ApiErrorCode`**. The envelope stays
+reserved for our failures: a document that is not a v2.0/v2.1 collection (400), a workspace
+the caller cannot see (404) or write to (403), a body over `IMPORT_MAX_BYTES` (413).
+
+⚠️ **`main.ts` creates the app with `{ bodyParser: false }`** so `configure-app.ts` can
+install a `json({ limit: IMPORT_MAX_BYTES })`. Nest's built-in parser caps at 100 kB, which
+real Postman exports exceed routinely, and it cannot be reconfigured afterwards.
+`AllExceptionsFilter` translates the parser's own errors — which are plain `Error`s, not
+`HttpException`s — into 413 and 400 rather than letting them fall through to a `500 INTERNAL`
+that blames the server for the caller's file.
 
 **Controllers never return entities.** They return a DTO such as `RequestResponseDto`,
 built with class-transformer's `excludeExtraneousValues`, so only `@Expose()`d fields
@@ -568,7 +586,15 @@ refresh itself fails, `loggedOut()` is dispatched and `RequireAuth` redirects to
   changes at the same time.
 - **Script execution** — the pre-request and post-response slots are stored and never run.
   The banner in `ScriptsTab` says so and stays until they do. A sandbox is the whole cost
-  here; `node:vm` is not a security boundary.
+  here; `node:vm` is not a security boundary. Import rewrites `pm.` to `rv.` on the way in,
+  which names the runtime that will eventually exist without pretending it does.
+- **Collection auth and variables at send time** — import gave `collections` two real jsonb
+  columns and fills them, so `auth: 'inherit'` finally has something to inherit *from*. Send
+  does not read them yet: it is one JOIN in the request load, one branch in `applyAuth`, and
+  one more ordered scope in `buildVariables`, whose seams are already commented.
+- **Sending multipart and binary bodies** — `form-data` and `binary` are stored faithfully
+  by import and refused by `/send` with an `unsupported-body-mode` warning. Both are blocked
+  on the file-upload storage question, not on the transport.
 - **Login and refresh throttling** — the machinery exists (`ThrottlingModule`, four named
   windows, per-name `@SkipThrottle`), so it is a `@UseGuards` on each plus a decision about
   shared or separate budgets.

@@ -1,5 +1,7 @@
 import {
   REQUEST_BODY_MODES,
+  type FormDataEntry,
+  type KeyValueEntry,
   type RequestBody,
   type RequestBodyMode,
 } from '@raven/contracts'
@@ -19,6 +21,14 @@ function emptyBody(mode: RequestBodyMode): RequestBody {
       return { mode: 'json', text: '' }
     case 'form-urlencoded':
       return { mode: 'form-urlencoded', entries: [] }
+    case 'xml':
+      return { mode: 'xml', text: '' }
+    case 'graphql':
+      return { mode: 'graphql', query: '', variables: '' }
+    case 'form-data':
+      return { mode: 'form-data', entries: [] }
+    case 'binary':
+      return { mode: 'binary', src: '' }
   }
 }
 
@@ -67,6 +77,24 @@ export function BodyTab({
     }
   }
 
+  /**
+   * The GraphQL variables editor gets its own Format, because it is a second
+   * JSON document on the same screen — sharing one button would leave the
+   * user guessing which editor it acts on.
+   */
+  const formatVariables = () => {
+    if (body.mode !== 'graphql') return
+    try {
+      onChange({
+        ...body,
+        variables: JSON.stringify(JSON.parse(body.variables), null, 2),
+      })
+      setFormatError(null)
+    } catch (error) {
+      setFormatError(error instanceof Error ? error.message : 'Invalid JSON')
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -99,7 +127,9 @@ export function BodyTab({
         <p className="text-sm text-fg-faint">This request has no body.</p>
       )}
 
-      {(body.mode === 'raw' || body.mode === 'json') && (
+      {(body.mode === 'raw' ||
+        body.mode === 'json' ||
+        body.mode === 'xml') && (
         /*
          * ⚠️ The border and the focus ring live on this wrapper, not inside the
          * editor. CodeMirror renders its own focusable `contenteditable`, so a
@@ -114,10 +144,22 @@ export function BodyTab({
         <div className="h-64 overflow-hidden rounded-md border border-line-strong transition-colors focus-within:border-accent">
           <CodeEditor
             value={body.text}
+            /*
+             * ⚠️ `xml` is edited as plain text, deliberately. Highlighting it
+             * means `@codemirror/lang-xml`, and **nothing is added on the
+             * strength of "we already have CodeMirror"** — the rule recorded
+             * with the six packages that arrived with it. An imported SOAP
+             * body is legible without colour; a seventh package is a decision
+             * to take on purpose, not a side effect of this slice.
+             */
             language={body.mode === 'json' ? 'json' : 'text'}
             ariaLabel="Request body"
             placeholderText={
-              body.mode === 'json' ? '{ "key": "value" }' : 'Request body'
+              body.mode === 'json'
+                ? '{ "key": "value" }'
+                : body.mode === 'xml'
+                  ? '<root></root>'
+                  : 'Request body'
             }
             onChange={(text) => onChange({ mode: body.mode, text })}
           />
@@ -131,6 +173,111 @@ export function BodyTab({
           workspaceId={workspaceId}
           onChange={(entries) => onChange({ mode: 'form-urlencoded', entries })}
         />
+      )}
+
+      {body.mode === 'graphql' && (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <span className="text-xs font-medium text-fg-muted">Query</span>
+            <div className="h-48 overflow-hidden rounded-md border border-line-strong transition-colors focus-within:border-accent">
+              <CodeEditor
+                value={body.query}
+                language="text"
+                ariaLabel="GraphQL query"
+                placeholderText="query { }"
+                onChange={(query) => onChange({ ...body, query })}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-fg-muted">
+                Variables
+              </span>
+              <button
+                type="button"
+                onClick={formatVariables}
+                className="rounded-md border border-line-strong px-2 py-1 text-xs text-fg-muted hover:bg-surface-muted"
+              >
+                Format JSON
+              </button>
+            </div>
+            {/*
+              ⚠️ Stored as raw *text*, not as a parsed object — Postman does the
+              same, and an in-progress edit is routinely not valid JSON. The
+              send path parses it, and warns rather than failing when it
+              cannot.
+            */}
+            <div className="h-32 overflow-hidden rounded-md border border-line-strong transition-colors focus-within:border-accent">
+              <CodeEditor
+                value={body.variables}
+                language="json"
+                ariaLabel="GraphQL variables"
+                placeholderText="{ }"
+                onChange={(variables) => onChange({ ...body, variables })}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {body.mode === 'form-data' && (
+        <div className="space-y-2">
+          {/*
+            ⚠️ `KeyValueEditor` is reused rather than forked, and the row `type`
+            is merged back **positionally** in `onChange`. The grid knows
+            nothing about a `type` field, so the alternative was a second grid
+            that would then drift from this one on every future change. A row
+            the grid appends has no counterpart in `entries` and becomes
+            `'text'`, which is the only thing a user can author here.
+          */}
+          <KeyValueEditor
+            entries={body.entries.map(
+              ({ key, value, enabled }): KeyValueEntry => ({
+                key,
+                value,
+                enabled,
+              }),
+            )}
+            keyPlaceholder="Field"
+            workspaceId={workspaceId}
+            onChange={(entries) =>
+              onChange({
+                mode: 'form-data',
+                entries: entries.map(
+                  (entry, index): FormDataEntry => ({
+                    ...entry,
+                    type: body.entries[index]?.type ?? 'text',
+                  }),
+                ),
+              })
+            }
+          />
+          {body.entries.some((entry) => entry.type === 'file') && (
+            <p className="text-xs text-fg-faint">
+              File fields hold the path recorded by the import — no file is
+              attached, and this body is not sent yet.
+            </p>
+          )}
+        </div>
+      )}
+
+      {body.mode === 'binary' && (
+        /*
+         * A read-only panel rather than a file picker: there is no upload
+         * endpoint and no storage answer behind one, so a picker here would be
+         * a control that cannot do the thing it appears to offer.
+         */
+        <div className="space-y-1 rounded-md border border-line-strong bg-surface-muted px-3 py-2">
+          <span className="text-xs font-medium text-fg-muted">File</span>
+          <p className="truncate font-mono text-sm" title={body.src}>
+            {body.src || 'No file path recorded.'}
+          </p>
+          <p className="text-xs text-fg-faint">
+            Imported as a path only. Binary bodies are not sent yet.
+          </p>
+        </div>
       )}
     </div>
   )

@@ -6,7 +6,22 @@
  * consumer that reads one reads the other.
  */
 
+import type { KeyValueEntry, RequestAuth } from './request';
+
 export const COLLECTION_NAME_MAX_LENGTH = 200;
+
+/**
+ * Collection auth is the thing a request's `auth: 'inherit'` inherits *from*,
+ * so `inherit` itself is excluded — a collection has no parent to defer to and
+ * a self-referential inherit is unrepresentable rather than merely discouraged.
+ *
+ * ⚠️ **Stored only, as of the import slice.** Send does not consult it yet; the
+ * `inherit` case in `interpolate.ts` still resolves to `none`. The column exists
+ * because an import that dropped a collection's auth would lose the credential
+ * for every request under it, and because wiring it into Send is then one JOIN
+ * and one branch rather than a migration.
+ */
+export type CollectionAuth = Exclude<RequestAuth, { type: 'inherit' }>;
 
 export interface Collection {
   id: string;
@@ -18,6 +33,10 @@ export interface Collection {
    * one: the move endpoints take a 0-based `index` among siblings instead.
    */
   position: number;
+  /** ⚠️ Plaintext secrets, exactly like `ApiRequest.auth`. See the README. */
+  auth: CollectionAuth;
+  /** Collection-scoped `{{variables}}`. Stored only — see `CollectionAuth`. */
+  variables: KeyValueEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -26,11 +45,15 @@ export interface CreateCollectionInput {
   workspaceId: string;
   name: string;
   description?: string | null;
+  auth?: CollectionAuth;
+  variables?: KeyValueEntry[];
 }
 
 export interface UpdateCollectionInput {
   name?: string;
   description?: string | null;
+  auth?: CollectionAuth;
+  variables?: KeyValueEntry[];
 }
 
 export interface MoveCollectionInput {

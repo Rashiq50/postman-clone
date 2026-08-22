@@ -233,7 +233,9 @@ would force `SessionsModule → AuthModule` while `AuthModule` already imports `
   There is still deliberately **no `Collection` or `Folder` tag**: neither has a read
   endpoint — they exist only inside the tree — and a tag nothing provides makes the cache
   look covered where it is not. Each arrives with the feature that reads it, which is
-  exactly how `Environment` and `Execution` arrived with Send.
+  exactly how `Environment` and `Execution` arrived with Send. ⚠️ **Postman import added
+  none** — it resyncs through `Tree` and invalidates `Environment`; an `Import` tag would
+  name something nothing reads.
 - The access token is held **in memory only**, in `authSlice`. No `localStorage`, no
   `sessionStorage`, no `redux-persist`. A reload restores the session through the refresh cookie.
   Adding any persistence layer here is the thing to catch in review. (The theme preference is
@@ -747,6 +749,10 @@ policy and the per-user throttle, not by the role table. Clearing history is `WR
 - ⚠️ **A failed history insert must not fail the send.** The request already left the
   building; a 500 here tells the user their send failed when it did not, and invites a retry
   that fires the upstream call twice.
+- ⚠️ **`inherit` still resolves to `none` at send time**, even though `collections.auth`
+  now exists and import fills it. The column is storage only for now; the seam is one JOIN
+  in the request load plus one branch in `applyAuth`, and the comments marking it are still
+  in `execution.service.ts`. Do not read "the column exists" as "Send uses it".
 - ⚠️ **The environment must be confirmed to belong to the *request's* workspace**, not
   merely to be visible to the caller — a member of two workspaces could otherwise inject
   workspace B's variables, and so B's base URL and credentials, into a send from workspace A.
@@ -834,6 +840,163 @@ unit-tested and deliberately uncalled** — a cron hook point, exactly like
 `deleteExpiredSessions()`. `@nestjs/schedule` is still not a dependency and this slice did
 not make it one.
 
+## Import
+
+`POST /import/collection` and `POST /import/environment`, in `backend/src/import/`. The
+layers are `postman-types.ts` (a reading aid, not a schema) → `dto/postman-constraints.ts`
+(structural validation) → `postman-collection.mapper.ts` / `postman-environment.mapper.ts`
+(pure, total) → `import.service.ts` (one transaction, bulk inserts).
+
+**⚠️ The idea that shapes everything: a lossy import is not a failed import.** Both routes
+answer **201** with `warnings[]` even when a folder's auth was dropped, a verb was coerced
+and three bodies came in as modes we cannot send. The house rule is the send path's —
+*partial results are data* — and it is why this slice added **no new `ApiErrorCode`**. A
+`400` for a 900-request export that mapped 890 requests perfectly leaves the user with
+nothing. Our envelope stays reserved for our failures: not a v2.0/v2.1 collection (400),
+workspace invisible (404), role too low (403), body too large (413).
+
+- **The mapper is total: it never throws.** The DTO has already confirmed the file is the
+  right *kind* of file; everything past that is a stranger's document, possibly
+  hand-edited, and every malformation is a warning plus a defensible default. The
+  `never throws on junk` case in the spec is the pin.
+- **The division of labour with the DTO is narrow and deliberate.** The constraint checks
+  only what makes the file the right kind — `info.schema` matches v2.0/v2.1, `info.name`
+  present, `item` an array, recursive item count ≤ `IMPORT_MAX_ITEMS`. A malformed header
+  is data we can still import; a v1 collection is a mistake the user must fix.
+- **`data` is `unknown` validated by one `@ValidatorConstraint`, never nested DTO classes.**
+  The `json-constraints.ts` precedent, only louder here: `whitelist: true` strips every key
+  a decorated class does not declare, so a class tree would **silently delete most of the
+  file** and the import would report success and produce an empty collection.
+- **Ids are minted in the mapper** (`randomUUID()`), so the whole tree exists as plain
+  objects with real parent links before a row is written. **Positions are computed**
+  (`(i + 1) * POSITION_GAP`) because every sibling set is brand new — exactly what
+  `appendPosition` would return, with no `MAX()` per set. `appendPosition` is called
+  **once**, for the collection among the workspace's existing collections.
+- ⚠️ **Folders are inserted grouped by depth ascending, one multi-row `INSERT` per level.**
+  The composite `FK_folders_parent` is checked per row, so a child written before its
+  parent fails outright — and the mapper's walk is depth-first, which is the wrong order.
+  Requests then go in as one flat chunked insert. Chunked at 500 for the **bind-parameter**
+  ceiling, not for correctness.
+- **Imports nothing from `WorkspacesModule`**, per the standing rule: `explainParentDenial`
+  and `appendPosition` are plain functions taking the caller's `EntityManager`, which is
+  also what lets the scope check enlist in the import's transaction.
+- ⚠️ **One transaction, all or nothing** — the opposite call from the warnings policy, and
+  for a reason: a half-imported collection shows a plausible tree, gives no way to tell
+  which requests are missing, and makes re-importing produce a duplicate rather than a repair.
+
+### Mapping traps
+
+- ⚠️ **`url` is Postman's `raw` and `queryParams` gets only the *disabled* rows.** Every
+  enabled row is already in the URL text and the send path *appends* `queryParams` onto it,
+  so returning them here would double every parameter on the first send. Disabled rows are
+  safe precisely because `interpolate.ts` filters to enabled rows first — they round-trip
+  into the Params table, stay visible, and never reach the wire. Same doctrine as the
+  frontend's `urlQuery.ts`: the URL text is canonical, the table holds what it cannot express.
+- ⚠️ **Never `new URL()`, in either direction.** A Postman URL is full of `{{baseUrl}}`,
+  which fails to parse, and percent-encoding mangles `{{` into `%7B%7B`. Assembly is plain
+  string work.
+- ⚠️ **Absent auth is `inherit`, `noauth` is `none`, and they are not the same thing.**
+  Collapsing them either strips a collection's credential from every request under it or
+  attaches one to a request the author opted out of. A *collection* maps absent to `none`,
+  having no parent.
+- ⚠️ **A folder's auth is dropped with a warning, never flattened onto its requests.**
+  Flattening copies one credential into N rows — rotate it later and you edit N requests and
+  miss one — and it erases the author's stated intent, which was `inherit`.
+- ⚠️ **Folder variables fold up into the collection's, first-seen wins.** The collection's
+  own are folded *first*, so a folder cannot shadow the value the user can actually see and
+  edit. Last-wins was the other defensible rule; resolving it *silently* was not, because
+  the loser has nowhere to live.
+- ⚠️ **An unknown method is coerced to GET and warns.** The `CHK_requests_method` constraint
+  means an unknown verb cannot be stored at all, and the URL, headers and body are still
+  worth having. GET is the coercion nobody expects to change server state.
+- ⚠️ **`:path` variables are left literal.** Rewriting `/users/:id` to `/users/{{id}}` puts a
+  name into the *variable* namespace that nothing defines, turning a visible `:id` into an
+  unresolved-variable warning at send time.
+- ⚠️ **`examples-dropped` is one aggregate warning with a count.** 300 saved examples must
+  not become 300 warnings that bury the ones a user has to act on.
+- **v2.0 vs v2.1 is three normalizers, not two type trees**: `postmanUrlToText` (string vs
+  object), `authParams` (object params vs `[{key,value}]`), `mapHeaders` (raw `\n`-delimited
+  string vs array). Both spellings turn up in files claiming either version.
+
+### pm → rv
+
+`pm-script-rewrite.ts` is one regex: `/(^|[^A-Za-z0-9_$.])pm(?=\s*\.)/g` → `'$1rv'`. The
+leading-character class excludes `.` so `x.pm.y` is untouched; the lookahead requires a
+property access so `const pm = 1` is untouched; the character is *captured and re-emitted*
+rather than matched with a lookbehind, which makes overlapping matches impossible so
+`pm.a + pm.b` is right in one pass. `postman.*` (the legacy API) is deliberately left alone.
+
+⚠️ **Accepted, documented collateral: `pm.` inside a string literal or comment rewrites
+too**, and there is a test pinning it. Scripts are stored and never executed, so a JS
+tokenizer would be a dependency (or a few hundred lines handling template literals, regex
+literals and ASI) bought to fix the wrong colour of word inside a comment. If that test
+ever starts failing, someone added a tokenizer — a decision to take on purpose.
+
+### What the new modes cost elsewhere
+
+The four body modes and the `unsupported` auth variant are **stored faithfully, sent where
+cheap** ("map now, implement later"). The exhaustive switches are the compiler's worklist:
+`emptyBody`/`emptyAuth` on the client, `applyBody`/`applyAuth` in `interpolate.ts`,
+`buildBody`/`applyAuth` in `execution.service.ts`.
+
+- `xml` sends as `application/xml`; `graphql` sends `JSON.stringify({query, variables})`.
+  ⚠️ Unlike `json` mode, the graphql envelope **is** re-serialised — the wrapper is ours,
+  not the user's. `variables` is raw *text* (Postman's storage, and an in-progress edit is
+  routinely not valid JSON), so it is parsed at send; an unparseable one **omits the key and
+  warns** rather than failing, because a server ignoring the variables is far more
+  informative than an error that never reaches it.
+- `form-data` and `binary` send **no body** plus `unsupported-body-mode`. Both need the
+  file-upload storage question answered; a file row's `value` is a *path on the author's
+  machine*, which is also why interpolation skips it.
+- `unsupported` auth applies **nothing** plus `unsupported-auth-type` naming the scheme.
+  Guessing at an OAuth 2 flow from stored params would send a credential the user never
+  reviewed; staying silent would produce a 401 with nothing connecting it to the import.
+  It is passed through **uninterpolated** — nothing is sent from those params, so resolving
+  a secret into them would only widen the redaction blast radius.
+- ⚠️ **`POSTMAN_UNSUPPORTED_AUTH_SCHEMES` is a closed list, and a scheme outside it becomes
+  `none` + warn** rather than being stored. Widening `scheme` to `string` would put an
+  unvalidatable value in a jsonb column.
+- **`collections.auth` and `collections.variables` are storage only this slice.** Send still
+  resolves `inherit` to `none`. They exist because an import that dropped a collection's auth
+  would lose the credential for every request under it; wiring them in is then one JOIN and
+  one branch rather than a migration.
+
+### Frontend
+
+- ⚠️ **`importCollection` is the one mutation that `resyncTree`s instead of patching.**
+  Every other structural change is one node moving; an import adds hundreds at once, and
+  reconstructing that shape client-side would mean a second mapper kept in step with the
+  server's by hand, to save one fetch on a rare action the user is already waiting on. The
+  resync runs **after `queryFulfilled`** — a failed import changed nothing. `importEnvironment`
+  invalidates the existing `Environment` list tag. **No new tag types.**
+- **One auto-detecting `ImportDialog`**, triggered from the Sidebar header and (with
+  `only="environment"`) from `EnvironmentsDialog`. ⚠️ It **detects rather than asking**: a
+  "Collection or Environment?" radio pair is a question the file already answers and the one
+  thing the user can get wrong. `detectImportKind` is deliberately shallow — it picks the
+  endpoint; the server's DTO is authoritative, and duplicating the schema check here would
+  produce two answers that drift.
+- ⚠️ **No drag-and-drop**, and the `<input type="file">` is **hidden behind a styled
+  button** — a file input's button is painted by the platform and cannot be themed, the same
+  reason `MoveToDialog` cannot use a native `<select>`. The input's `value` is cleared on
+  every change so re-picking the *same* file after a failed import fires `change` again.
+- `postmanFile.ts` is a pure module for the `responseFile.ts` reason: a file exporting both
+  components and plain functions breaks fast refresh, and oxlint's `only-export-components`
+  is what catches it.
+- ⚠️ **`AuthTab` offers `unsupported` in its `Select` only when it is already the value.**
+  Nothing can author one, and an entry a user can pick that then sends nothing is a worse
+  lie than no entry; keeping it while it *is* the value is what stops Radix rendering a
+  blank trigger. It renders the `ScriptsTab` banner pattern plus a read-only params table —
+  no editor for a scheme we cannot send.
+- ⚠️ **`BodyTab` reuses `KeyValueEditor` for form-data and merges `type` back
+  positionally**, rather than forking a second grid that would then drift. A row the grid
+  appends has no counterpart and becomes `'text'`.
+- ⚠️ **`xml` is edited as plain text — no `@codemirror/lang-xml`.** Nothing is added on the
+  strength of "we already have CodeMirror". The import slice added **no dependency at all**;
+  the bundle went 877.12/279.25 → 897.96/284.72 kB (**+20.84 raw / +5.47 gzip**).
+- The Sidebar's `importing` state is plain `useState` and deliberately **not** in the
+  memoized `handlers` — no row opens it, so putting it there would risk re-rendering every
+  mounted row.
+
 ## Syntax highlighting
 
 Two consumers, **two different answers, and the split is the whole point**: colour for
@@ -879,6 +1042,8 @@ dependency.
     search panel, no collab. Each is a separate `@codemirror/*` package precisely so it can be
     declined. If the number must come down, the lever is a lazy `import()` — the editor is one
     tab of five.
+  - ⚠️ The rule held under pressure: Postman import brought an `xml` body mode and did
+    **not** bring `@codemirror/lang-xml`. XML is edited as plain text.
   - ⚠️ **`HighlightStyle` is defined with `class:`, not `color:`**, so Lezer's tags resolve
     through the same `--syntax-*` tokens as the response pane and `yarn contrast` audits them.
     The chrome is `EditorView.theme` with `var(--…)` values. **There is no hex literal in that
@@ -1169,6 +1334,20 @@ search. Still not built from earlier slices: drag-and-drop (the `/move` endpoint
 the kebab menu drives them; dnd is a pure-frontend change later), invites and a members pane
 (no unused UI), and organizations (the seam is one nullable column).
 
+**The Postman import slice is complete on both sides.** `POST /import/collection` and
+`POST /import/environment` accept v2.0 and v2.1 exports, map everything into the domain and
+answer 201 with `warnings[]`; the sidebar header and the environment manager each open one
+auto-detecting `ImportDialog`. It brought four new `RequestBody` modes (`xml`, `graphql`,
+`form-data`, `binary`), an `unsupported` `RequestAuth` variant, two real jsonb columns on
+`collections` (`auth`, `variables` — storage only), and a body-parser limit raised to
+`IMPORT_MAX_BYTES` via `{ bodyParser: false }` in `main.ts`. Unit specs cover both mappers
+against real-shaped v2.1 and v2.0 fixtures, the pm→rv rewrite, the DTO constraints and the
+new `json-constraints`/`interpolate` branches; `backend/test/import.e2e-spec.ts` covers the
+API end to end (happy path, tree structure, round-tripped bodies/auth/scripts, environment
+import, cross-tenant 404, VIEWER 403, wrong-schema 400, oversize 413) and `send.e2e-spec.ts`
+grew six cases for the new modes. **No new dependency, no new `ApiErrorCode`, no new tag
+type.** See *Import* above — every trap there is load-bearing.
+
 ⚠️ **The active environment is per member, not per device** — deliberately the opposite of
 the theme preference, because an environment selects *which server you are about to hit* and
 that should follow someone between machines. Do not "consistency-fix" either one into the
@@ -1219,7 +1398,7 @@ All three are recorded in the README under *Rebrand leftovers* as well.
   A run in 2026-08 reformatted the whole backend, so `auth/**` and `sessions/**` are no longer the
   4-space, non-Prettier-clean outliers they used to be; the backend is now uniformly 2-space and
   Prettier-formatted. Older docs (including parts of [AUTH_PLAN.md](AUTH_PLAN.md)) still say
-  "4-space" for those files — that instruction is stale. It leaves 5 errors it cannot auto-fix
+  "4-space" for those files — that instruction is stale. It leaves 9 errors it cannot auto-fix
   (`no-unsafe-*` and `unbound-method`, mostly in the specs); those are pre-existing, so a red
   `yarn lint` is not necessarily your change. Still: match the file you are editing rather than
   reformatting it.

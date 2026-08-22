@@ -40,6 +40,10 @@ export const SEND_WARNING_KINDS = [
   'body-truncated',
   'stored-body-truncated',
   'auth-stripped-on-cross-origin-redirect',
+  // The import slice: modes and schemes we store faithfully but cannot send.
+  'unsupported-body-mode',
+  'unsupported-auth-type',
+  'invalid-graphql-variables',
 ] as const;
 
 export type SendWarningKind = (typeof SEND_WARNING_KINDS)[number];

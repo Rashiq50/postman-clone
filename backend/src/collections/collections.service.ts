@@ -82,6 +82,13 @@ export class CollectionsService {
           workspace: { id: input.workspaceId },
           name: input.name,
           description: input.description ?? null,
+          // ⚠️ Explicit, not left to the column defaults: `manager.save`
+          // returns the entity it was handed, so an omitted field comes back
+          // `undefined` and `CollectionResponseDto` exposes a key the contract
+          // says is always present. The DB default is the backstop for rows
+          // written by anything else, not the source of this response.
+          auth: input.auth ?? { type: 'none' },
+          variables: input.variables ?? [],
           position,
         }),
       );

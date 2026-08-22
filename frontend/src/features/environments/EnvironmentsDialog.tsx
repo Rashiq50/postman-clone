@@ -7,6 +7,7 @@ import {
   DialogSecondaryAction,
 } from '../../components/ui/Dialog'
 import { PromptDialog } from '../../components/ui/PromptDialog'
+import { ImportDialog } from '../import/ImportDialog'
 import { VariableEditor } from './VariableEditor'
 import {
   useCreateEnvironmentMutation,
@@ -47,6 +48,7 @@ export function EnvironmentsDialog({
 
   const environments = data?.data ?? []
 
+  const [importing, setImporting] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState<EnvironmentVariable[] | null>(null)
   const [prompt, setPrompt] = useState<{
@@ -120,6 +122,20 @@ export function EnvironmentsDialog({
               <span className="text-xs font-medium text-fg-subtle">
                 Environments
               </span>
+              <div className="flex items-center gap-1">
+              {/*
+                ⚠️ `only="environment"` — a collection export dropped into the
+                variables screen would import a whole sidebar tree from a
+                dialog about variables. The file is still auto-detected; this
+                only narrows what this entry point will accept, and says so.
+              */}
+              <button
+                type="button"
+                onClick={() => setImporting(true)}
+                className="rounded px-1.5 py-0.5 text-xs text-fg-muted transition hover:bg-surface-muted"
+              >
+                Import
+              </button>
               <button
                 type="button"
                 disabled={isCreating}
@@ -151,6 +167,7 @@ export function EnvironmentsDialog({
               >
                 + New
               </button>
+              </div>
             </div>
 
             {isLoading && <p className="text-xs text-fg-faint">Loading…</p>}
@@ -262,6 +279,14 @@ export function EnvironmentsDialog({
           danger
           onConfirm={confirm.onConfirm}
           onClose={() => setConfirm(null)}
+        />
+      )}
+
+      {importing && (
+        <ImportDialog
+          workspaceId={workspaceId}
+          only="environment"
+          onClose={() => setImporting(false)}
         />
       )}
     </>

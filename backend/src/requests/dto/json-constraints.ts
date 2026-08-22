@@ -1,6 +1,8 @@
 import {
+  POSTMAN_UNSUPPORTED_AUTH_SCHEMES,
   REQUEST_AUTH_TYPES,
   REQUEST_BODY_MODES,
+  type PostmanAuthScheme,
   type RequestAuthType,
   type RequestBodyMode,
 } from '@raven/contracts';
@@ -56,6 +58,25 @@ export class KeyValueEntriesConstraint implements ValidatorConstraintInterface {
   }
 }
 
+/**
+ * A `FormDataEntry[]`. A `KeyValueEntry` plus a `type` discriminating a text
+ * row from an imported file placeholder — the extra field is why this cannot
+ * just call `isKeyValueEntries`.
+ */
+export function isFormDataEntries(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isPlainObject(entry) &&
+        isString(entry.key) &&
+        isString(entry.value) &&
+        typeof entry.enabled === 'boolean' &&
+        (entry.type === 'text' || entry.type === 'file'),
+    )
+  );
+}
+
 export function isRequestBody(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
   if (!REQUEST_BODY_MODES.includes(value.mode as RequestBodyMode)) return false;
@@ -68,6 +89,17 @@ export function isRequestBody(value: unknown): boolean {
       return isString(value.text);
     case 'form-urlencoded':
       return isKeyValueEntries(value.entries);
+    case 'xml':
+      return isString(value.text);
+    case 'graphql':
+      // ⚠️ `variables` is raw JSON *text* and is not parsed here. Postman
+      // stores it that way, an in-progress edit is routinely not valid JSON,
+      // and the send path is where an unparseable one earns its warning.
+      return isString(value.query) && isString(value.variables);
+    case 'form-data':
+      return isFormDataEntries(value.entries);
+    case 'binary':
+      return isString(value.src);
     default:
       return false;
   }
@@ -101,6 +133,12 @@ export function isRequestAuth(value: unknown): boolean {
         isString(value.key) &&
         isString(value.value) &&
         (value.in === 'header' || value.in === 'query')
+      );
+    case 'unsupported':
+      return (
+        POSTMAN_UNSUPPORTED_AUTH_SCHEMES.includes(
+          value.scheme as PostmanAuthScheme,
+        ) && isKeyValueEntries(value.params)
       );
     default:
       return false;
@@ -144,6 +182,33 @@ export class RequestScriptsConstraint implements ValidatorConstraintInterface {
 
   defaultMessage(): string {
     return 'scripts must be an object with exactly { preRequest: string, postRequest: string }';
+  }
+}
+
+/**
+ * A `CollectionAuth`: a `RequestAuth` that is not `inherit`.
+ *
+ * A collection has no parent to defer to, so `inherit` there is either a
+ * no-op or a lie about where the credential comes from. Expressed as a
+ * *subtraction* from `isRequestAuth` rather than as a second switch: a new auth
+ * variant must then be added in exactly one place, and cannot be accidentally
+ * legal for a request and illegal for a collection.
+ */
+export function isCollectionAuth(value: unknown): boolean {
+  return (
+    isRequestAuth(value) &&
+    (value as Record<string, unknown>).type !== 'inherit'
+  );
+}
+
+@ValidatorConstraint({ name: 'collectionAuth' })
+export class CollectionAuthConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    return isCollectionAuth(value);
+  }
+
+  defaultMessage(): string {
+    return `auth must be an object whose type is one of: ${REQUEST_AUTH_TYPES.filter((type) => type !== 'inherit').join(', ')}, with the fields that type requires`;
   }
 }
 

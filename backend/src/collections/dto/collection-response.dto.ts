@@ -1,4 +1,8 @@
-import type { Collection } from '@raven/contracts';
+import type {
+  Collection,
+  CollectionAuth,
+  KeyValueEntry,
+} from '@raven/contracts';
 import { Expose, Transform, plainToInstance } from 'class-transformer';
 import { CollectionEntity } from '../entities/collection.entity';
 
@@ -20,6 +24,13 @@ export class CollectionResponseDto implements Collection {
 
   @Expose()
   position: number;
+
+  /** ⚠️ Plaintext, exactly like the request's. See the README. */
+  @Expose()
+  auth: CollectionAuth;
+
+  @Expose()
+  variables: KeyValueEntry[];
 
   @Expose()
   @Transform(isoDate)

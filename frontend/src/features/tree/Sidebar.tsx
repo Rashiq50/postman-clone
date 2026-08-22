@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { PromptDialog } from '../../components/ui/PromptDialog'
+import { ImportDialog } from '../import/ImportDialog'
 import { errorMessage } from '../../lib/api-error'
 import {
   useCreateCollectionMutation,
@@ -92,6 +93,16 @@ export function Sidebar() {
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null)
   const [prompt, setPrompt] = useState<PromptState | null>(null)
   const [confirm, setConfirm] = useState<ConfirmState | null>(null)
+  /**
+   * ⚠️ Plain local state, and deliberately **not** reachable from
+   * `TreeHandlers`. Nothing in a row opens this dialog — it is a header
+   * action — so putting it in the memoized handlers object would add a
+   * dependency that buys nothing and risks re-rendering every mounted row when
+   * it changes. The three dialog states above are in `handlers` only because
+   * rows genuinely open them, and even there it is their *stable setters* that
+   * are captured.
+   */
+  const [importing, setImporting] = useState(false)
 
   const [createCollection] = useCreateCollectionMutation()
   const [updateCollection] = useUpdateCollectionMutation()
@@ -367,22 +378,36 @@ export function Sidebar() {
         <h2 className="text-xs font-semibold tracking-wide text-fg-subtle uppercase">
           Collections
         </h2>
-        <button
-          type="button"
-          onClick={() =>
-            setPrompt({
-              title: 'New collection',
-              label: 'Collection name',
-              initialValue: 'New collection',
-              confirmLabel: 'Create',
-              onSubmit: (name) => void createCollection({ workspaceId: ws, name }),
-            })
-          }
-          className="rounded px-1.5 text-lg leading-none text-fg-faint hover:bg-surface-muted hover:text-fg-muted"
-          aria-label="New collection"
-        >
-          <span aria-hidden>+</span>
-        </button>
+        <div className="flex items-center gap-1">
+          {/*
+            Text rather than a glyph, beside the `+`: importing is the one
+            action here a new user is actively looking for, and an icon for it
+            would be a guess (a tray? an arrow?) with no established meaning.
+          */}
+          <button
+            type="button"
+            onClick={() => setImporting(true)}
+            className="rounded px-1.5 py-0.5 text-xs text-fg-faint hover:bg-surface-muted hover:text-fg-muted"
+          >
+            Import
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setPrompt({
+                title: 'New collection',
+                label: 'Collection name',
+                initialValue: 'New collection',
+                confirmLabel: 'Create',
+                onSubmit: (name) => void createCollection({ workspaceId: ws, name }),
+              })
+            }
+            className="rounded px-1.5 text-lg leading-none text-fg-faint hover:bg-surface-muted hover:text-fg-muted"
+            aria-label="New collection"
+          >
+            <span aria-hidden>+</span>
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -397,7 +422,7 @@ export function Sidebar() {
         {tree?.collections.length === 0 && (
           <p className="px-3 py-4 text-sm text-fg-faint">
             No collections yet. Use <span aria-hidden>+</span> above to create
-            one.
+            one, or Import a Postman export.
           </p>
         )}
 
@@ -432,6 +457,10 @@ export function Sidebar() {
           onConfirm={confirm.onConfirm}
           onClose={() => setConfirm(null)}
         />
+      )}
+
+      {importing && (
+        <ImportDialog workspaceId={ws} onClose={() => setImporting(false)} />
       )}
 
       {moveDialog && tree && (

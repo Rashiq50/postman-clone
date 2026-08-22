@@ -69,7 +69,8 @@ describe('Sending a request (e2e)', () => {
 
   let counter = 0;
   const runId = `${process.pid.toString(36)}${Date.now().toString(36)}`;
-  const freshEmail = () => `${EMAIL_PREFIX}${runId}-${counter++}${EMAIL_DOMAIN}`;
+  const freshEmail = () =>
+    `${EMAIL_PREFIX}${runId}-${counter++}${EMAIL_DOMAIN}`;
 
   beforeAll(async () => {
     fixture = http.createServer((req, res) => handler(req, res));
@@ -202,7 +203,8 @@ describe('Sending a request (e2e)', () => {
   const send = (ident: Ident, requestId: string, body: unknown = {}) =>
     as(ident).post(`/api/v1/requests/${requestId}/send`, body);
 
-  const resultOf = (res: request.Response): SendResult => res.body as SendResult;
+  const resultOf = (res: request.Response): SendResult =>
+    res.body as SendResult;
 
   let user: Ident;
   beforeAll(async () => {
@@ -378,9 +380,9 @@ describe('Sending a request (e2e)', () => {
       const stored = await as(user)
         .get(`/api/v1/executions/${result.executionId!}`)
         .expect(200);
-      expect((stored.body as { body: { encoding: string } }).body.encoding).toBe(
-        'base64',
-      );
+      expect(
+        (stored.body as { body: { encoding: string } }).body.encoding,
+      ).toBe('base64');
     });
 
     // ⚠️ This is why header validation exists at all: a saved request is
@@ -433,7 +435,12 @@ describe('Sending a request (e2e)', () => {
 
   async function createEnvironment(
     ident: Ident,
-    variables: { key: string; value: string; enabled: boolean; secret?: boolean }[],
+    variables: {
+      key: string;
+      value: string;
+      enabled: boolean;
+      secret?: boolean;
+    }[],
   ): Promise<string> {
     const res = await as(ident)
       .post('/api/v1/environments', {
@@ -444,6 +451,151 @@ describe('Sending a request (e2e)', () => {
       .expect(201);
     return (res.body as { id: string }).id;
   }
+
+  // ---------------------------------------------- the modes import brought in
+
+  describe('body modes and auth types that arrived with Postman import', () => {
+    /** Echoes back what the fixture actually received. */
+    const echoReceived = (): Promise<{
+      body: string;
+      contentType: string | undefined;
+      authorization: string | undefined;
+    }> =>
+      new Promise((resolve) => {
+        handler = (req, res) => {
+          const chunks: Buffer[] = [];
+          req.on('data', (chunk: Buffer) => chunks.push(chunk));
+          req.on('end', () => {
+            resolve({
+              body: Buffer.concat(chunks).toString('utf8'),
+              contentType: req.headers['content-type'],
+              authorization: req.headers.authorization,
+            });
+            res.end('ok');
+          });
+        };
+      });
+
+    it('sends an xml body as application/xml', async () => {
+      const received = echoReceived();
+
+      const id = await makeRequest(user, {
+        method: 'POST',
+        body: { mode: 'xml', text: '<note><to>you</to></note>' },
+      });
+      const result = resultOf(await send(user, id).expect(200));
+
+      expect(result.result).toMatchObject({ outcome: 'response', status: 200 });
+      await expect(received).resolves.toMatchObject({
+        body: '<note><to>you</to></note>',
+        contentType: 'application/xml',
+      });
+      expect(result.warnings).toEqual([]);
+    });
+
+    it('sends a graphql body as a JSON envelope with parsed variables', async () => {
+      const received = echoReceived();
+
+      const id = await makeRequest(user, {
+        method: 'POST',
+        body: {
+          mode: 'graphql',
+          query: '{ me { id } }',
+          variables: '{"first": 2}',
+        },
+      });
+      await send(user, id).expect(200);
+
+      const sent = await received;
+      expect(sent.contentType).toBe('application/json');
+      expect(JSON.parse(sent.body)).toEqual({
+        query: '{ me { id } }',
+        variables: { first: 2 },
+      });
+    });
+
+    // ⚠️ Unparseable variables **omit the key and warn** rather than failing the
+    // send: a server that ignores the variables is far more informative than an
+    // error that never reaches it.
+    it('warns and drops unparseable graphql variables instead of failing', async () => {
+      const received = echoReceived();
+
+      const id = await makeRequest(user, {
+        method: 'POST',
+        body: { mode: 'graphql', query: '{ me }', variables: '{oops' },
+      });
+      const result = resultOf(await send(user, id).expect(200));
+
+      expect(result.result).toMatchObject({ outcome: 'response', status: 200 });
+      expect(result.warnings.map((w) => w.kind)).toContain(
+        'invalid-graphql-variables',
+      );
+      expect(JSON.parse((await received).body)).toEqual({ query: '{ me }' });
+    });
+
+    it('sends no body for form-data, and warns naming the mode', async () => {
+      const received = echoReceived();
+
+      const id = await makeRequest(user, {
+        method: 'POST',
+        body: {
+          mode: 'form-data',
+          entries: [
+            { key: 'caption', value: 'hi', enabled: true, type: 'text' },
+            { key: 'f', value: '/tmp/a.png', enabled: true, type: 'file' },
+          ],
+        },
+      });
+      const result = resultOf(await send(user, id).expect(200));
+
+      // A stored-but-unsendable body is a warning on a successful send, not a
+      // failure: the request still went out and the status line is real.
+      expect(result.result).toMatchObject({ outcome: 'response', status: 200 });
+      const warning = result.warnings.find(
+        (w) => w.kind === 'unsupported-body-mode',
+      );
+      expect(warning?.message).toContain('form-data');
+      expect((await received).body).toBe('');
+    });
+
+    it('sends no body for binary, and warns', async () => {
+      const received = echoReceived();
+
+      const id = await makeRequest(user, {
+        method: 'POST',
+        body: { mode: 'binary', src: '/tmp/a.bin' },
+      });
+      const result = resultOf(await send(user, id).expect(200));
+
+      expect(
+        result.warnings.find((w) => w.kind === 'unsupported-body-mode')
+          ?.message,
+      ).toContain('binary');
+      expect((await received).body).toBe('');
+    });
+
+    // ⚠️ Applying nothing is the point. Guessing at an OAuth 2 flow from stored
+    // params would send a credential the user never reviewed.
+    it('sends no Authorization for an imported unsupported auth, and warns', async () => {
+      const received = echoReceived();
+
+      const id = await makeRequest(user, {
+        auth: {
+          type: 'unsupported',
+          scheme: 'oauth2',
+          params: [{ key: 'accessToken', value: 'abc123', enabled: true }],
+        },
+      });
+      const result = resultOf(await send(user, id).expect(200));
+
+      expect(result.result).toMatchObject({ outcome: 'response', status: 200 });
+      expect((await received).authorization).toBeUndefined();
+      const warning = result.warnings.find(
+        (w) => w.kind === 'unsupported-auth-type',
+      );
+      expect(warning?.message).toContain('oauth2');
+    });
+  });
 
   describe('{{variable}} resolution', () => {
     it('resolves a variable from the named environment', async () => {

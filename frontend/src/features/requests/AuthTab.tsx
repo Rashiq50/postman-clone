@@ -19,6 +19,15 @@ function emptyAuth(type: RequestAuthType): RequestAuth {
       return { type: 'basic', username: '', password: '' }
     case 'apiKey':
       return { type: 'apiKey', key: '', value: '', in: 'header' }
+    case 'unsupported':
+      /*
+       * ⚠️ Unreachable in practice — the Select below never offers this unless
+       * it is already the value, so nothing can switch *into* it. The branch
+       * exists because the switch is exhaustive over `RequestAuthType`, which
+       * is what turns a future auth variant into a compile error here. The
+       * scheme is a placeholder that no user path can produce.
+       */
+      return { type: 'unsupported', scheme: 'oauth2', params: [] }
   }
 }
 
@@ -106,11 +115,27 @@ export function AuthTab({
 }) {
   return (
     <div className="max-w-md space-y-3">
+      {/*
+        ⚠️ `unsupported` is offered **only when it is already the value**.
+        Nothing can author one — it exists so an imported oauth2/awsv4/digest
+        request keeps its credentials instead of silently becoming "none" — and
+        a dropdown entry that a user can pick, which then sends nothing, is a
+        worse lie than no entry at all. Keeping it in the list while it *is* the
+        value is what stops Radix rendering a blank trigger with no placeholder.
+      */}
       <Select
         label="Auth type"
         value={auth.type}
         onValueChange={(next) => onChange(emptyAuth(next as RequestAuthType))}
-        entries={REQUEST_AUTH_TYPES.map((type) => ({ value: type, label: type }))}
+        entries={REQUEST_AUTH_TYPES.filter(
+          (type) => type !== 'unsupported' || auth.type === 'unsupported',
+        ).map((type) => ({
+          value: type,
+          label:
+            type === 'unsupported'
+              ? `${auth.type === 'unsupported' ? auth.scheme : 'unsupported'} (imported)`
+              : type,
+        }))}
       />
 
       {auth.type === 'inherit' && (
@@ -183,6 +208,63 @@ export function AuthTab({
             />
           </label>
         </>
+      )}
+
+      {auth.type === 'unsupported' && (
+        <div className="space-y-3">
+          {/*
+            The `ScriptsTab` banner pattern: a stored-but-inert feature says so
+            where the user is looking at it, rather than surprising them with a
+            401 from the target and nothing anywhere connecting the two. The
+            send path warns as well — both, because only one of them is visible
+            before you press Send.
+          */}
+          <p className="rounded-md border border-line bg-surface-muted px-3 py-2 text-sm text-fg-muted">
+            <span className="font-medium text-fg">
+              {auth.scheme} auth was imported and stored, but is not sent.
+            </span>{' '}
+            The values below are kept exactly as they arrived so nothing is
+            lost. Sending this request sends no auth — switch to a supported
+            type to change that.
+          </p>
+
+          {auth.params.length === 0 ? (
+            <p className="text-sm text-fg-faint">
+              No parameters were recorded for this scheme.
+            </p>
+          ) : (
+            /*
+              Read-only, and a table rather than disabled inputs: there is no
+              editor for a scheme we cannot send, and a form the user can type
+              into implies a save that would mean something.
+            */
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[24rem] text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-fg-subtle">
+                    <th className="px-2 py-1 font-medium">Parameter</th>
+                    <th className="px-2 py-1 font-medium">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auth.params.map((param) => (
+                    <tr
+                      key={param.key}
+                      className="border-t border-line-subtle align-top"
+                    >
+                      <td className="px-2 py-1 font-mono text-xs text-fg-muted">
+                        {param.key}
+                      </td>
+                      <td className="px-2 py-1 font-mono text-xs break-all">
+                        {param.value}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       <p className="pt-2 text-xs text-fg-faint">

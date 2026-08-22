@@ -181,7 +181,7 @@ export class ExecutionService {
 
     applyAuth(resolved.auth, headers, url, warnings);
 
-    const body = buildBody(resolved, headers);
+    const body = buildBody(resolved, headers, warnings);
 
     if (body && body.length > this.options.maxRequestBodyBytes) {
       return {
@@ -383,6 +383,17 @@ function applyAuth(
       if (auth.in === 'header') set(auth.key, auth.value);
       else url.searchParams.set(auth.key, auth.value);
       return;
+    case 'unsupported':
+      // ⚠️ Applies **nothing**, and says so. The alternative — guessing at, say,
+      // an OAuth 2 flow from the stored params — would send a credential the
+      // user never reviewed to a host they may not have looked at. Silence
+      // would be worse still: the request goes out unauthenticated, the target
+      // answers 401, and nothing anywhere connects that to the import.
+      warnings.push({
+        kind: 'unsupported-auth-type',
+        message: `This request uses "${auth.scheme}" auth, which was imported and stored but cannot be sent. The request was sent with no auth.`,
+      });
+      return;
   }
 }
 
@@ -396,6 +407,7 @@ function applyAuth(
 function buildBody(
   resolved: SendableRequest,
   headers: ResponseHeader[],
+  warnings: SendWarning[],
 ): Buffer | null {
   const hasContentType = headers.some(
     (header) => header.name.toLowerCase() === 'content-type',
@@ -427,6 +439,54 @@ function buildBody(
       if (text === '') return null;
       defaultContentType('application/x-www-form-urlencoded');
       return Buffer.from(text, 'utf8');
+    }
+    case 'xml': {
+      if (resolved.body.text === '') return null;
+      defaultContentType('application/xml');
+      return Buffer.from(resolved.body.text, 'utf8');
+    }
+    case 'graphql': {
+      if (resolved.body.query === '') return null;
+      defaultContentType('application/json');
+      // ⚠️ The envelope is built with `JSON.stringify`, unlike `json` mode,
+      // which sends the user's text verbatim. There is no formatting to
+      // preserve here — the query and the variables are two separate fields
+      // and the wrapper around them is ours, not the user's.
+      //
+      // `variables` is raw text (Postman's storage), so it is parsed rather
+      // than embedded. An unparseable one **omits the key and warns** instead
+      // of failing the send: a server that ignores the variables is far more
+      // informative than an error that never reaches it, and the query is the
+      // part the user is usually debugging.
+      const envelope: { query: string; variables?: unknown } = {
+        query: resolved.body.query,
+      };
+      const raw = resolved.body.variables.trim();
+      if (raw !== '') {
+        try {
+          envelope.variables = JSON.parse(raw);
+        } catch {
+          warnings.push({
+            kind: 'invalid-graphql-variables',
+            message:
+              'The GraphQL variables are not valid JSON. The query was sent without them.',
+          });
+        }
+      }
+      return Buffer.from(JSON.stringify(envelope), 'utf8');
+    }
+    case 'form-data':
+    case 'binary': {
+      // ⚠️ No body, and a warning naming the mode. Both need the file-upload
+      // storage question answered — a multipart part and a binary body are
+      // both "the contents of a file the server does not have". Serialising
+      // the placeholder *paths* as if they were content would produce a
+      // request that succeeds and means nothing.
+      warnings.push({
+        kind: 'unsupported-body-mode',
+        message: `A "${resolved.body.mode}" body was imported and stored but cannot be sent yet. The request was sent with no body.`,
+      });
+      return null;
     }
   }
 }

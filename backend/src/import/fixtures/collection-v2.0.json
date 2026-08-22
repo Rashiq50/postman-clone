@@ -1,0 +1,26 @@
+{
+  "info": {
+    "name": "Legacy Export",
+    "description": "A plain-string description.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "String URL",
+      "request": {
+        "method": "GET",
+        "url": "https://legacy.example.com/things?page=1",
+        "header": "Accept: application/json\nX-Trace: on",
+        "auth": { "type": "bearer", "bearer": { "token": "legacy-token" } }
+      }
+    },
+    {
+      "name": "Object auth params",
+      "request": {
+        "method": "POST",
+        "url": "https://legacy.example.com/login",
+        "auth": { "type": "basic", "basic": { "username": "u", "password": "p" } }
+      }
+    }
+  ]
+}

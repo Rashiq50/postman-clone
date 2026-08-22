@@ -1,4 +1,5 @@
 import {
+  CollectionAuthConstraint,
   EnvironmentVariablesConstraint,
   KeyValueEntriesConstraint,
   RequestAuthConstraint,
@@ -25,6 +26,30 @@ describe('RequestBodyConstraint', () => {
       'form-urlencoded with no entries',
       { mode: 'form-urlencoded', entries: [] },
     ],
+    ['xml', { mode: 'xml', text: '<a/>' }],
+    ['graphql', { mode: 'graphql', query: '{ me }', variables: '{}' }],
+    [
+      // ⚠️ `variables` is raw *text*, not parsed here: an in-progress edit is
+      // routinely not valid JSON, and the send path is where that warns.
+      'graphql with unparseable variables text',
+      { mode: 'graphql', query: '{ me }', variables: '{oops' },
+    ],
+    [
+      'graphql with empty strings',
+      { mode: 'graphql', query: '', variables: '' },
+    ],
+    [
+      'form-data with a text and a file row',
+      {
+        mode: 'form-data',
+        entries: [
+          { key: 'a', value: 'b', enabled: true, type: 'text' },
+          { key: 'f', value: '/tmp/x.png', enabled: false, type: 'file' },
+        ],
+      },
+    ],
+    ['form-data with no entries', { mode: 'form-data', entries: [] }],
+    ['binary', { mode: 'binary', src: '/tmp/x.bin' }],
   ])('accepts %s', (_label, value) => {
     expect(constraint.validate(value)).toBe(true);
   });
@@ -38,6 +63,24 @@ describe('RequestBodyConstraint', () => {
     [
       'form-urlencoded with malformed entries',
       { mode: 'form-urlencoded', entries: [{ key: 'a' }] },
+    ],
+    ['xml without text', { mode: 'xml' }],
+    ['graphql missing variables', { mode: 'graphql', query: '{ me }' }],
+    [
+      'graphql with an object for variables',
+      { mode: 'graphql', query: '{ me }', variables: { id: 1 } },
+    ],
+    ['binary without src', { mode: 'binary' }],
+    [
+      'form-data with a row missing its type',
+      { mode: 'form-data', entries: [{ key: 'a', value: 'b', enabled: true }] },
+    ],
+    [
+      'form-data with an unknown row type',
+      {
+        mode: 'form-data',
+        entries: [{ key: 'a', value: 'b', enabled: true, type: 'blob' }],
+      },
     ],
     ['null', null],
     ['an array', []],
@@ -112,6 +155,18 @@ describe('RequestAuthConstraint', () => {
       { type: 'apiKey', key: 'k', value: 'v', in: 'header' },
     ],
     ['apiKey in query', { type: 'apiKey', key: 'k', value: 'v', in: 'query' }],
+    [
+      'an imported unsupported scheme',
+      {
+        type: 'unsupported',
+        scheme: 'oauth2',
+        params: [{ key: 'accessToken', value: 'x', enabled: true }],
+      },
+    ],
+    [
+      'an imported unsupported scheme with no params',
+      { type: 'unsupported', scheme: 'awsv4', params: [] },
+    ],
   ])('accepts %s', (_label, value) => {
     expect(constraint.validate(value)).toBe(true);
   });
@@ -124,9 +179,50 @@ describe('RequestAuthConstraint', () => {
       'apiKey with an invalid location',
       { type: 'apiKey', key: 'k', value: 'v', in: 'cookie' },
     ],
+    [
+      // The scheme list is closed on purpose: `unsupported` is a storage slot
+      // for schemes we know about, not a hole for an arbitrary string.
+      'unsupported with a scheme outside the list',
+      { type: 'unsupported', scheme: 'quantum', params: [] },
+    ],
+    ['unsupported with no params', { type: 'unsupported', scheme: 'oauth2' }],
+    [
+      'unsupported with malformed params',
+      { type: 'unsupported', scheme: 'oauth2', params: [{ key: 'a' }] },
+    ],
     ['null', null],
   ])('rejects %s', (_label, value) => {
     expect(constraint.validate(value)).toBe(false);
+  });
+});
+
+describe('CollectionAuthConstraint', () => {
+  const constraint = new CollectionAuthConstraint();
+
+  it('accepts everything a request may carry except inherit', () => {
+    expect(constraint.validate({ type: 'none' })).toBe(true);
+    expect(constraint.validate({ type: 'bearer', token: 't' })).toBe(true);
+    expect(
+      constraint.validate({
+        type: 'unsupported',
+        scheme: 'digest',
+        params: [],
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects inherit — a collection has no parent to inherit from', () => {
+    expect(constraint.validate({ type: 'inherit' })).toBe(false);
+  });
+
+  it('rejects whatever the request constraint rejects, with no second switch', () => {
+    expect(constraint.validate({ type: 'bearer' })).toBe(false);
+    expect(constraint.validate(null)).toBe(false);
+  });
+
+  it('produces one message that does not offer inherit', () => {
+    expect(constraint.defaultMessage()).not.toContain('inherit');
+    expect(constraint.defaultMessage()).toContain('bearer');
   });
 });
 

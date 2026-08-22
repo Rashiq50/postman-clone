@@ -1,0 +1,12 @@
+{
+  "id": "aaaaaaaa-0000-4000-8000-000000000000",
+  "name": "Staging",
+  "values": [
+    { "key": "baseUrl", "value": "https://staging.example.com", "enabled": true, "type": "default" },
+    { "key": "apiKey", "value": "sk-live-123", "enabled": true, "type": "secret" },
+    { "key": "retired", "value": "x", "enabled": false, "type": "default" },
+    { "key": "port", "value": 8080, "type": "default" },
+    { "key": "novalue", "type": "default" }
+  ],
+  "_postman_variable_scope": "environment"
+}

@@ -148,6 +148,42 @@ function applyBody(
           (key) => `body field "${key}"`,
         ),
       };
+    case 'xml':
+      // Text is text. The mode differs from `raw` only in the Content-Type the
+      // send path defaults to and in what the editor highlights.
+      return { mode: 'xml', text: context.apply(body.text, 'body') };
+    case 'graphql':
+      return {
+        mode: 'graphql',
+        query: context.apply(body.query, 'GraphQL query'),
+        variables: context.apply(body.variables, 'GraphQL variables'),
+      };
+    case 'form-data':
+      return {
+        mode: 'form-data',
+        // ⚠️ A `file` row's `value` is a **path on the author's machine**, not
+        // content, so interpolating it would produce a different path that is
+        // just as unreadable — and this body is not sent at all. Text rows are
+        // interpolated so the stored shape stays consistent with every other
+        // mode if sending ever lands.
+        entries: body.entries
+          .filter((entry) => entry.enabled)
+          .map((entry) =>
+            entry.type === 'file'
+              ? entry
+              : {
+                  ...entry,
+                  key: context.apply(entry.key, `body field "${entry.key}"`),
+                  value: context.apply(
+                    entry.value,
+                    `body field "${entry.key}"`,
+                  ),
+                },
+          ),
+      };
+    case 'binary':
+      // A path, like a file row above. Nothing to substitute into.
+      return body;
   }
 }
 
@@ -185,6 +221,14 @@ function applyAuth(
         value: context.apply(auth.value, 'auth API key value'),
         in: auth.in,
       };
+    case 'unsupported':
+      // ⚠️ Passed through **uninterpolated**. Nothing is ever sent from these
+      // params, so substituting into them could only leak an environment
+      // secret into `redact.ts`'s blast radius for no benefit — and a value
+      // marked `secret` gets added to `secretValues` by the very act of
+      // resolving it. The warning is raised in `execution.service.ts`, where
+      // the auth is applied, not here.
+      return auth;
   }
 }
 
